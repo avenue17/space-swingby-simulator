@@ -1,10 +1,9 @@
 import numpy as np
-from utils.constants import SPACECRAFT_START_POSITION
 
 
 class Spacecraft:
-    def __init__(self):
-        self.initial_position = np.array(SPACECRAFT_START_POSITION, dtype=float)
+    def __init__(self, start_position):
+        self.initial_position = np.array(start_position, dtype=float)
         self.position = self.initial_position.copy()
         self.velocity = np.zeros(3, dtype=float)
         self.trajectory = []

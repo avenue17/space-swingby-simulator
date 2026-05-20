@@ -8,7 +8,8 @@ class Simulation:
         self.solar_system = solar_system
 
     def run(self, launch_angle, launch_speed, start_time=0.0, duration=DEFAULT_DURATION, dt=DEFAULT_DT):
-        spacecraft = Spacecraft()
+        start_position = self._get_spacecraft_start_position(start_time)
+        spacecraft = Spacecraft(start_position)
         spacecraft.reset(launch_speed, launch_angle)
 
         times = []
@@ -49,6 +50,17 @@ class Simulation:
             "duration": float(duration),
             "dt": float(dt)
         }
+
+    def _get_spacecraft_start_position(self, start_time):
+        earth = self.solar_system.get_planet("Earth")
+        if earth is None:
+            return np.array([-620.0, -260.0, 0.0], dtype=float)
+
+        earth_position = earth.position_at(start_time)
+        direction = earth_position / np.linalg.norm(earth_position)
+
+        launch_offset = earth.radius * 2.2
+        return earth_position + direction * launch_offset
 
     def _total_acceleration(self, position, t):
         acceleration = np.zeros(3, dtype=float)

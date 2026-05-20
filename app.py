@@ -1,11 +1,18 @@
 import os
-from ui.layout import build_app
+import uvicorn
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
-app = build_app()
+app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/")
+def index():
+    return FileResponse("static/index.html")
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 7860))
-    app.launch(
-        server_name="0.0.0.0",
-        server_port=port
-    )
+    uvicorn.run(app, host="0.0.0.0", port=port)

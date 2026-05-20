@@ -2,3 +2,5 @@ gradio
 numpy
 plotly
 pandas
+fastapi
+uvicorn

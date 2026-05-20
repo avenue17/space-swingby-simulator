@@ -150,6 +150,13 @@ def build_app():
             result_text
         ]
 
+        for component in [angle, speed]:
+            component.change(
+                fn=update_simulation,
+                inputs=simulation_inputs,
+                outputs=simulation_outputs
+            )
+
         simulate_button.click(
             fn=update_simulation,
             inputs=simulation_inputs,
