@@ -2,10 +2,10 @@ import * as THREE from "https://esm.sh/three@0.164.1";
 import { OrbitControls } from "https://esm.sh/three@0.164.1/examples/jsm/controls/OrbitControls.js";
 
 const G = 0.9;
-const DT = 0.16;
-const DURATION = 620;
+const DT = 0.12;
+const DURATION = 800;
 const SOFTENING = 8;
-const MAX_POINTS = 2600;
+const MAX_POINTS = 3200;
 
 const viewport = document.getElementById("viewport");
 
@@ -16,7 +16,7 @@ const camera = new THREE.PerspectiveCamera(
     60,
     window.innerWidth / window.innerHeight,
     0.1,
-    7000
+    8000
 );
 
 camera.position.set(900, 900, 900);
@@ -37,7 +37,7 @@ controls.target.set(0, 0, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 80;
-controls.maxDistance = 2600;
+controls.maxDistance = 2800;
 controls.update();
 
 const raycaster = new THREE.Raycaster();
@@ -154,13 +154,13 @@ let predictedEndMarker = null;
 
 let actualLine = null;
 let actualMarker = null;
-
 let hoverRing = null;
-let predictedResult = null;
 
+let predictedResult = null;
 let actualState = null;
+
 let playScale = 0;
-let simulationAccumulator = 0;
+let accumulator = 0;
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.65);
 scene.add(ambient);
@@ -275,7 +275,7 @@ function startPosition(t) {
     const earthPosition = earth.positionAt(t);
     const direction = earthPosition.clone().normalize();
 
-    return earthPosition.clone().add(direction.multiplyScalar(earth.radius * 2.5));
+    return earthPosition.clone().add(direction.multiplyScalar(earth.radius * 2.8));
 }
 
 function initialVelocity() {
@@ -305,6 +305,24 @@ function totalAcceleration(position, t) {
     return acceleration;
 }
 
+function advanceState(position, velocity, t, dt) {
+    const acceleration = totalAcceleration(position, t);
+    velocity.add(acceleration.multiplyScalar(dt));
+    position.add(velocity.clone().multiplyScalar(dt));
+}
+
+function checkCollision(position, t) {
+    for (const planet of planets) {
+        const distance = planet.positionAt(t).distanceTo(position);
+
+        if (distance < planet.radius) {
+            return planet.name;
+        }
+    }
+
+    return null;
+}
+
 function computePredictedTrajectory() {
     const startTime = Number(ui.startTime.value);
     const initialSpeed = Number(ui.speed.value);
@@ -322,10 +340,7 @@ function computePredictedTrajectory() {
 
     for (let i = 0; i < steps; i++) {
         const t = startTime + i * DT;
-        const acceleration = totalAcceleration(position, t);
-
-        velocity.add(acceleration.multiplyScalar(DT));
-        position.add(velocity.clone().multiplyScalar(DT));
+        advanceState(position, velocity, t, DT);
 
         if (i % interval === 0) {
             positions.push(position.clone());
@@ -333,17 +348,15 @@ function computePredictedTrajectory() {
             times.push(t);
         }
 
-        for (const planet of planets) {
-            const distance = planet.positionAt(t).distanceTo(position);
+        collision = checkCollision(position, t);
 
-            if (distance < planet.radius) {
-                collision = planet.name;
-                break;
-            }
+        if (collision) {
+            break;
         }
 
-        if (collision) break;
-        if (position.length() > 2200) break;
+        if (position.length() > 2400) {
+            break;
+        }
     }
 
     predictedResult = {
@@ -361,7 +374,9 @@ function computePredictedTrajectory() {
 }
 
 function disposeObject(object) {
-    if (!object) return;
+    if (!object) {
+        return;
+    }
 
     scene.remove(object);
 
@@ -383,7 +398,7 @@ function drawPredictedTrajectory() {
     const material = new THREE.LineBasicMaterial({
         color: 0x58f0ff,
         transparent: true,
-        opacity: 0.75
+        opacity: 0.55
     });
 
     predictedLine = new THREE.Line(geometry, material);
@@ -404,14 +419,14 @@ function drawPredictedTrajectory() {
     scene.add(predictedEndMarker);
 }
 
-function resetActualTrajectoryObjects() {
+function resetActualObjects() {
     disposeObject(actualLine);
     disposeObject(actualMarker);
     actualLine = null;
     actualMarker = null;
 }
 
-function launchActual() {
+function startActualFlight() {
     const startTime = Number(ui.startTime.value);
     const position = startPosition(startTime);
     const velocity = initialVelocity();
@@ -425,16 +440,20 @@ function launchActual() {
         velocity,
         positions: [position.clone()],
         speeds: [velocity.length()],
+        times: [startTime],
         collision: null
     };
 
     playScale = 1;
-    resetActualTrajectoryObjects();
+    accumulator = 0;
+
+    resetActualObjects();
     drawActualTrajectory();
+    drawChart(actualState.speeds, "actual speed");
     updateInfo();
 }
 
-function pauseActual() {
+function pauseActualFlight() {
     if (actualState) {
         actualState.paused = true;
     }
@@ -442,33 +461,92 @@ function pauseActual() {
     playScale = 0;
 }
 
-function stepActual(dt) {
-    if (!actualState || !actualState.active || actualState.paused) return;
-
-    const t = actualState.startTime + actualState.elapsed;
-    const acceleration = totalAcceleration(actualState.position, t);
-
-    actualState.velocity.add(acceleration.multiplyScalar(dt));
-    actualState.position.add(actualState.velocity.clone().multiplyScalar(dt));
-    actualState.elapsed += dt;
-
-    actualState.positions.push(actualState.position.clone());
-    actualState.speeds.push(actualState.velocity.length());
-
-    for (const planet of planets) {
-        const distance = planet.positionAt(t).distanceTo(actualState.position);
-
-        if (distance < planet.radius) {
-            actualState.collision = planet.name;
-            actualState.active = false;
-            playScale = 0;
-            break;
-        }
+function resumeActualFlight(scale) {
+    if (!actualState) {
+        startActualFlight();
     }
 
-    if (actualState.position.length() > 2200 || actualState.elapsed > DURATION) {
+    actualState.paused = false;
+    actualState.active = true;
+    playScale = scale;
+}
+
+function stepActualFlight(dt) {
+    if (!actualState || !actualState.active || actualState.paused) {
+        return;
+    }
+
+    const currentTime = actualState.startTime + actualState.elapsed;
+
+    advanceState(actualState.position, actualState.velocity, currentTime, dt);
+    actualState.elapsed += dt;
+
+    const nextTime = actualState.startTime + actualState.elapsed;
+    actualState.positions.push(actualState.position.clone());
+    actualState.speeds.push(actualState.velocity.length());
+    actualState.times.push(nextTime);
+
+    actualState.collision = checkCollision(actualState.position, nextTime);
+
+    if (actualState.collision) {
         actualState.active = false;
+        actualState.paused = true;
         playScale = 0;
+    }
+
+    if (actualState.position.length() > 2400 || actualState.elapsed >= DURATION) {
+        actualState.active = false;
+        actualState.paused = true;
+        playScale = 0;
+    }
+
+    updatePlanetPositions(nextTime);
+    drawActualTrajectory();
+    drawChart(actualState.speeds, "actual speed");
+    updateInfo();
+}
+
+function rebuildActualUntil(targetElapsed) {
+    if (!actualState) {
+        return;
+    }
+
+    const startTime = actualState.startTime;
+    const position = startPosition(startTime);
+    const velocity = initialVelocity();
+
+    actualState.position = position;
+    actualState.velocity = velocity;
+    actualState.elapsed = 0;
+    actualState.positions = [position.clone()];
+    actualState.speeds = [velocity.length()];
+    actualState.times = [startTime];
+    actualState.collision = null;
+    actualState.active = true;
+    actualState.paused = true;
+
+    let remaining = Math.max(0, targetElapsed);
+
+    while (remaining > 0) {
+        const step = Math.min(DT, remaining);
+        const currentTime = actualState.startTime + actualState.elapsed;
+
+        advanceState(actualState.position, actualState.velocity, currentTime, step);
+        actualState.elapsed += step;
+
+        const nextTime = actualState.startTime + actualState.elapsed;
+        actualState.positions.push(actualState.position.clone());
+        actualState.speeds.push(actualState.velocity.length());
+        actualState.times.push(nextTime);
+
+        actualState.collision = checkCollision(actualState.position, nextTime);
+
+        if (actualState.collision) {
+            actualState.active = false;
+            break;
+        }
+
+        remaining -= step;
     }
 
     updatePlanetPositions(actualState.startTime + actualState.elapsed);
@@ -492,7 +570,7 @@ function drawActualTrajectory() {
     scene.add(actualLine);
 
     actualMarker = new THREE.Mesh(
-        new THREE.SphereGeometry(9, 20, 20),
+        new THREE.SphereGeometry(11, 24, 24),
         new THREE.MeshBasicMaterial({ color: 0xffd84d })
     );
     actualMarker.position.copy(actualState.position);
@@ -500,13 +578,17 @@ function drawActualTrajectory() {
 }
 
 function updateInfo() {
+    if (!predictedResult) {
+        return;
+    }
+
     const predictedSpeeds = predictedResult.speeds;
     const predictedFinalSpeed = predictedSpeeds[predictedSpeeds.length - 1];
     const predictedMaxSpeed = Math.max(...predictedSpeeds);
     const predictedSpeedGain = predictedFinalSpeed - predictedResult.initialSpeed;
 
-    let predictedClosestName = "";
-    let predictedClosestDistance = Infinity;
+    let closestName = "";
+    let closestDistance = Infinity;
 
     for (let i = 0; i < predictedResult.positions.length; i++) {
         const position = predictedResult.positions[i];
@@ -515,24 +597,29 @@ function updateInfo() {
         for (const planet of planets) {
             const distance = planet.positionAt(t).distanceTo(position);
 
-            if (distance < predictedClosestDistance) {
-                predictedClosestDistance = distance;
-                predictedClosestName = planet.name;
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestName = planet.name;
             }
         }
     }
 
-    let actualText = "실제 비행: 아직 발사 안 됨";
+    let actualText = "아직 발사 안 됨";
 
     if (actualState) {
-        const actualCurrentSpeed = actualState.velocity.length();
+        const actualSpeed = actualState.velocity.length();
         const actualMaxSpeed = Math.max(...actualState.speeds);
-        const actualTime = actualState.elapsed;
-        const actualStatus = actualState.collision ? `충돌: ${actualState.collision}` : actualState.active ? "비행 중" : "종료";
+        const actualStatus = actualState.collision
+            ? `충돌: ${actualState.collision}`
+            : actualState.active && !actualState.paused
+                ? "비행 중"
+                : actualState.paused
+                    ? "일시정지"
+                    : "종료";
 
         actualText =
-            `실제 비행 시간: ${actualTime.toFixed(2)}
-실제 현재 속도: ${actualCurrentSpeed.toFixed(2)}
+            `실제 비행 시간: ${actualState.elapsed.toFixed(2)}
+실제 현재 속도: ${actualSpeed.toFixed(2)}
 실제 최대 속도: ${actualMaxSpeed.toFixed(2)}
 실제 상태: ${actualStatus}`;
     }
@@ -543,8 +630,8 @@ function updateInfo() {
 예상 최종 속도: ${predictedFinalSpeed.toFixed(2)}
 예상 최대 속도: ${predictedMaxSpeed.toFixed(2)}
 예상 속도 변화량: ${predictedSpeedGain.toFixed(2)}
-예상 최소 접근 천체: ${predictedClosestName}
-예상 최소 접근 거리: ${predictedClosestDistance.toFixed(2)}
+예상 최소 접근 천체: ${closestName}
+예상 최소 접근 거리: ${closestDistance.toFixed(2)}
 예상 충돌 여부: ${predictedResult.collision ?? "없음"}
 
 [실제 궤적]
@@ -574,7 +661,7 @@ function drawChart(speeds, label) {
     const maxSpeed = Math.max(...speeds);
     const range = Math.max(maxSpeed - minSpeed, 1);
 
-    context.strokeStyle = "#58f0ff";
+    context.strokeStyle = label.includes("actual") ? "#ffd84d" : "#58f0ff";
     context.lineWidth = 2;
     context.beginPath();
 
@@ -628,12 +715,24 @@ function resetCamera() {
     controls.update();
 }
 
-function moveTime(delta) {
-    const next = Math.max(0, Math.min(900, Number(ui.startTime.value) + delta));
-
-    ui.startTime.value = next.toFixed(0);
+function clearActualAndRecomputePredicted() {
     actualState = null;
-    resetActualTrajectoryObjects();
+    playScale = 0;
+    accumulator = 0;
+    resetActualObjects();
+    computePredictedTrajectory();
+}
+
+function moveBack(seconds) {
+    if (actualState) {
+        const targetElapsed = Math.max(0, actualState.elapsed - seconds);
+        rebuildActualUntil(targetElapsed);
+        playScale = 0;
+        return;
+    }
+
+    const next = Math.max(0, Math.min(900, Number(ui.startTime.value) - seconds));
+    ui.startTime.value = next.toFixed(0);
     updateUIValues();
     computePredictedTrajectory();
 }
@@ -671,7 +770,9 @@ function handleHover(event) {
 }
 
 function handleClick(event) {
-    if (event.target !== renderer.domElement) return;
+    if (event.target !== renderer.domElement) {
+        return;
+    }
 
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -690,21 +791,12 @@ function handleClick(event) {
     }
 }
 
-for (const input of [ui.angle, ui.speed]) {
+for (const input of [ui.angle, ui.speed, ui.startTime]) {
     input.addEventListener("input", () => {
-        actualState = null;
-        resetActualTrajectoryObjects();
         updateUIValues();
-        computePredictedTrajectory();
+        clearActualAndRecomputePredicted();
     });
 }
-
-ui.startTime.addEventListener("input", () => {
-    actualState = null;
-    resetActualTrajectoryObjects();
-    updateUIValues();
-    computePredictedTrajectory();
-});
 
 ui.massScale.addEventListener("input", updateUIValues);
 ui.radiusScale.addEventListener("input", updateUIValues);
@@ -721,9 +813,7 @@ ui.savePlanet.addEventListener("click", () => {
     );
     oldGeometry.dispose();
 
-    actualState = null;
-    resetActualTrajectoryObjects();
-    computePredictedTrajectory();
+    clearActualAndRecomputePredicted();
 });
 
 ui.resetPlanets.addEventListener("click", () => {
@@ -732,45 +822,37 @@ ui.resetPlanets.addEventListener("click", () => {
     }
 
     selectedPlanet = planets.find((planet) => planet.name === "Earth");
-    actualState = null;
-    resetActualTrajectoryObjects();
     loadSelectedPlanet();
     resetCamera();
-    computePredictedTrajectory();
+    clearActualAndRecomputePredicted();
 });
 
 ui.launch.addEventListener("click", () => {
-    launchActual();
+    startActualFlight();
 });
 
 ui.pause.addEventListener("click", () => {
-    pauseActual();
+    pauseActualFlight();
 });
 
 ui.speed1x.addEventListener("click", () => {
-    if (!actualState) launchActual();
-    actualState.paused = false;
-    playScale = 1;
+    resumeActualFlight(1);
 });
 
 ui.speed2x.addEventListener("click", () => {
-    if (!actualState) launchActual();
-    actualState.paused = false;
-    playScale = 2;
+    resumeActualFlight(2);
 });
 
 ui.speed5x.addEventListener("click", () => {
-    if (!actualState) launchActual();
-    actualState.paused = false;
-    playScale = 5;
+    resumeActualFlight(5);
 });
 
 ui.back1.addEventListener("click", () => {
-    moveTime(-1);
+    moveBack(1);
 });
 
 ui.back5.addEventListener("click", () => {
-    moveTime(-5);
+    moveBack(5);
 });
 
 ui.toggleLeft.addEventListener("click", () => {
@@ -808,11 +890,11 @@ function animate() {
     const delta = clock.getDelta();
 
     if (actualState && actualState.active && !actualState.paused && playScale > 0) {
-        simulationAccumulator += delta * playScale;
+        accumulator += delta * playScale;
 
-        while (simulationAccumulator >= DT) {
-            stepActual(DT);
-            simulationAccumulator -= DT;
+        while (accumulator >= DT) {
+            stepActualFlight(DT);
+            accumulator -= DT;
         }
     }
 
