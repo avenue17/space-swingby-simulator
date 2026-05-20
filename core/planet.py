@@ -1,59 +1,65 @@
-from dataclasses import dataclass
-import numpy as np
-from utils.constants import SOFTENING
+class Planet {
+    constructor(data) {
+        this.name = data.name;
+        this.baseMass = data.mass;
+        this.baseRadius = data.radius;
+        this.baseInfluenceRadius = data.influenceRadius;
+        this.orbitRadius = data.orbitRadius;
+        this.angularSpeed = data.angularSpeed;
+        this.initialAngle = data.initialAngle;
+        this.color = data.color;
+        this.massScale = 1;
+        this.radiusScale = 1;
+        this.mesh = null;
+        this.influenceMesh = null;
+        this.influenceShell = null;
+        this.orbitMesh = null;
+    }
 
+    get mass() {
+        return this.baseMass * this.massScale;
+    }
 
-@dataclass
-class Planet:
-    name: str
-    base_mass: float
-    base_radius: float
-    orbit_radius: float
-    angular_speed: float
-    initial_angle: float
-    base_influence_radius: float
-    color: str
-    mass_scale: float = 1.0
-    radius_scale: float = 1.0
-    influence_scale: float = 1.0
+    get radius() {
+        return this.baseRadius * this.radiusScale;
+    }
 
-    @property
-    def mass(self):
-        return self.base_mass * self.mass_scale
+    get influenceRadius() {
+        return this.baseInfluenceRadius * Math.sqrt(this.massScale);
+    }
 
-    @property
-    def radius(self):
-        return self.base_radius * self.radius_scale
+    get visualRadius() {
+        if (this.name === "Sun") return 32;
+        if (this.name === "Jupiter") return 18;
+        if (this.name === "Saturn") return 15;
+        if (this.name === "Uranus") return 13;
+        if (this.name === "Neptune") return 13;
+        if (this.name === "Earth") return 12;
+        if (this.name === "Venus") return 11;
+        if (this.name === "Mars") return 10;
+        return 8;
+    }
 
-    @property
-    def influence_radius(self):
-        value = self.base_influence_radius * self.influence_scale
-        return max(value, self.radius * 1.5)
+    get visualScaledRadius() {
+        return this.visualRadius * this.radiusScale;
+    }
 
-    def position_at(self, t):
-        if self.orbit_radius == 0:
-            return np.array([0.0, 0.0, 0.0], dtype=float)
+    positionAt(t) {
+        if (this.orbitRadius === 0) {
+            return new THREE.Vector3(0, 0, 0);
+        }
 
-        angle = self.angular_speed * t + self.initial_angle
-        return np.array([
-            self.orbit_radius * np.cos(angle),
-            self.orbit_radius * np.sin(angle),
-            0.0
-        ], dtype=float)
+        const angle = this.angularSpeed * t + this.initialAngle;
 
-    def gravity_acceleration(self, spacecraft_position, t, gravitational_constant):
-        planet_position = self.position_at(t)
-        direction = planet_position - spacecraft_position
-        distance = np.linalg.norm(direction)
-        safe_distance = max(distance, SOFTENING)
-        return gravitational_constant * self.mass * direction / (safe_distance ** 3)
+        return new THREE.Vector3(
+            this.orbitRadius * Math.cos(angle),
+            0,
+            this.orbitRadius * Math.sin(angle)
+        );
+    }
 
-    def set_scales(self, mass_scale, radius_scale, influence_scale):
-        self.mass_scale = float(mass_scale)
-        self.radius_scale = float(radius_scale)
-        self.influence_scale = float(influence_scale)
-
-    def reset(self):
-        self.mass_scale = 1.0
-        self.radius_scale = 1.0
-        self.influence_scale = 1.0
+    reset() {
+        this.massScale = 1;
+        this.radiusScale = 1;
+    }
+}

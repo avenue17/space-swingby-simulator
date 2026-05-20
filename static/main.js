@@ -87,15 +87,16 @@ class Planet {
         this.name = data.name;
         this.baseMass = data.mass;
         this.baseRadius = data.radius;
+        this.baseInfluenceRadius = data.influenceRadius;
         this.orbitRadius = data.orbitRadius;
         this.angularSpeed = data.angularSpeed;
         this.initialAngle = data.initialAngle;
-        this.influenceRadius = data.influenceRadius;
         this.color = data.color;
         this.massScale = 1;
         this.radiusScale = 1;
         this.mesh = null;
         this.influenceMesh = null;
+        this.influenceShell = null;
         this.orbitMesh = null;
     }
 
@@ -105,6 +106,10 @@ class Planet {
 
     get radius() {
         return this.baseRadius * this.radiusScale;
+    }
+
+    get influenceRadius() {
+        return this.baseInfluenceRadius * Math.sqrt(this.massScale);
     }
 
     get visualRadius() {
@@ -117,6 +122,10 @@ class Planet {
         if (this.name === "Venus") return 11;
         if (this.name === "Mars") return 10;
         return 8;
+    }
+
+    get visualScaledRadius() {
+        return this.visualRadius * this.radiusScale;
     }
 
     positionAt(t) {
@@ -154,7 +163,7 @@ const customPlanetData = [
 ];
 
 const realScaledPlanetData = [
-    { name: "Sun", mass: 12000, radius: 28, orbitRadius: 0, angularSpeed: 0, initialAngle: 0, influenceRadius: 135, color: 0xffcc33, periodDays: 0, phaseAtEpoch: 0 },
+    { name: "Sun", mass: 333000 * 280 * 0.015, radius: 28, orbitRadius: 0, angularSpeed: 0, initialAngle: 0, influenceRadius: 160, color: 0xffcc33, periodDays: 0, phaseAtEpoch: 0 },
     { name: "Mercury", mass: 0.055 * 280, radius: 5, orbitRadius: 70, angularSpeed: 0, initialAngle: 0, influenceRadius: 20, color: 0x999999, periodDays: 87.969, phaseAtEpoch: 4.40 },
     { name: "Venus", mass: 0.815 * 280, radius: 8, orbitRadius: 130, angularSpeed: 0, initialAngle: 0, influenceRadius: 36, color: 0xffa64d, periodDays: 224.701, phaseAtEpoch: 3.18 },
     { name: "Earth", mass: 280, radius: 9, orbitRadius: 180, angularSpeed: 0, initialAngle: 0, influenceRadius: 52, color: 0x3a7bff, periodDays: 365.256, phaseAtEpoch: 1.75 },
@@ -251,7 +260,8 @@ function makeCircle(radius, color, opacity, y = 0, segments = 240) {
     const material = new THREE.LineBasicMaterial({
         color,
         transparent: true,
-        opacity
+        opacity,
+        depthWrite: false
     });
 
     return new THREE.Line(geometry, material);
@@ -293,7 +303,7 @@ function buildPlanetObjects() {
             scene.add(planet.orbitMesh);
         }
 
-        const geometry = new THREE.SphereGeometry(planet.visualRadius, 40, 40);
+        const geometry = new THREE.SphereGeometry(planet.visualScaledRadius, 40, 40);
         const material = new THREE.MeshStandardMaterial({
             color: planet.color,
             emissive: planet.name === "Sun" ? planet.color : 0x000000,
@@ -306,8 +316,21 @@ function buildPlanetObjects() {
         planet.mesh.userData.planet = planet;
         scene.add(planet.mesh);
 
-        planet.influenceMesh = makeCircle(planet.influenceRadius, 0x4da3ff, 0.30, 2.0, 180);
+        planet.influenceMesh = makeCircle(planet.influenceRadius, 0x58f0ff, 0.55, 2.0, 220);
         scene.add(planet.influenceMesh);
+
+        planet.influenceShell = new THREE.Mesh(
+            new THREE.SphereGeometry(planet.influenceRadius, 32, 18),
+            new THREE.MeshBasicMaterial({
+                color: 0x58f0ff,
+                transparent: true,
+                opacity: planet.name === "Sun" ? 0.035 : 0.065,
+                wireframe: true,
+                depthWrite: false
+            })
+        );
+        planet.influenceShell.userData.planet = planet;
+        scene.add(planet.influenceShell);
     }
 
     hoverRing = makeCircle(22, 0xffffff, 0.9, 3.0, 120);
@@ -321,13 +344,21 @@ function disposeObject(object) {
     scene.remove(object);
 
     if (object.geometry) object.geometry.dispose();
-    if (object.material) object.material.dispose();
+
+    if (object.material) {
+        if (Array.isArray(object.material)) {
+            for (const material of object.material) material.dispose();
+        } else {
+            object.material.dispose();
+        }
+    }
 }
 
 function clearPlanetObjects() {
     for (const planet of planets) {
         disposeObject(planet.mesh);
         disposeObject(planet.influenceMesh);
+        disposeObject(planet.influenceShell);
         disposeObject(planet.orbitMesh);
     }
 
@@ -379,6 +410,7 @@ function updatePlanetPositions(t) {
 
         if (planet.mesh) planet.mesh.position.copy(position);
         if (planet.influenceMesh) planet.influenceMesh.position.copy(position);
+        if (planet.influenceShell) planet.influenceShell.position.copy(position);
     }
 }
 
@@ -392,7 +424,13 @@ function startPosition(t) {
     const earthPosition = earth.positionAt(t);
     const direction = earthPosition.clone().normalize();
 
-    return earthPosition.clone().add(direction.multiplyScalar(earth.radius * 2.8));
+    const safeDistance = Math.max(
+        earth.radius * 2.8,
+        earth.visualScaledRadius * 2.2,
+        35
+    );
+
+    return earthPosition.clone().add(direction.multiplyScalar(safeDistance));
 }
 
 function initialVelocity() {
@@ -633,6 +671,8 @@ function updateInfo() {
 
     let closestName = "";
     let closestDistance = Infinity;
+    let closestInfluenceRadius = 0;
+    let insideInfluenceName = null;
 
     for (let i = 0; i < predictedResult.positions.length; i++) {
         const position = predictedResult.positions[i];
@@ -644,6 +684,11 @@ function updateInfo() {
             if (distance < closestDistance) {
                 closestDistance = distance;
                 closestName = planet.name;
+                closestInfluenceRadius = planet.influenceRadius;
+            }
+
+            if (!insideInfluenceName && distance <= planet.influenceRadius) {
+                insideInfluenceName = planet.name;
             }
         }
     }
@@ -681,6 +726,8 @@ function updateInfo() {
 예상 속도 변화량: ${predictedSpeedGain.toFixed(2)}
 예상 최소 접근 천체: ${closestName}
 예상 최소 접근 거리: ${closestDistance.toFixed(2)}
+최소 접근 천체 중력권 반지름: ${closestInfluenceRadius.toFixed(2)}
+예상 중력권 진입: ${insideInfluenceName ?? "없음"}
 예상 충돌 여부: ${predictedResult.collision ?? "없음"}
 
 [실제 궤적]
@@ -688,7 +735,8 @@ ${actualText}
 
 현재 태양계 시간: ${simTime.toFixed(2)}
 청록색: 예상 궤적
-노란색: 실제 궤적`;
+노란색: 실제 궤적
+청록색 와이어 구: 중력권`;
 }
 
 function drawChart(speeds, label, targetCanvas = ui.chart) {
@@ -765,6 +813,63 @@ function loadSelectedPlanet() {
     ui.massScale.value = selectedPlanet.massScale;
     ui.radiusScale.value = selectedPlanet.radiusScale;
     updateUIValues();
+}
+
+function updatePlanetVisualGeometry(planet) {
+    if (!planet) return;
+
+    if (planet.mesh) {
+        const oldGeometry = planet.mesh.geometry;
+        planet.mesh.geometry = new THREE.SphereGeometry(planet.visualScaledRadius, 40, 40);
+        oldGeometry.dispose();
+    }
+
+    if (planet.influenceMesh) {
+        const oldGeometry = planet.influenceMesh.geometry;
+        planet.influenceMesh.geometry = makeCircle(planet.influenceRadius, 0x58f0ff, 0.55, 2.0, 220).geometry;
+        oldGeometry.dispose();
+    }
+
+    if (planet.influenceShell) {
+        const oldGeometry = planet.influenceShell.geometry;
+        planet.influenceShell.geometry = new THREE.SphereGeometry(planet.influenceRadius, 32, 18);
+        oldGeometry.dispose();
+    }
+}
+
+function updateInfluenceVisuals() {
+    let activePosition = null;
+
+    if (actualState) {
+        activePosition = actualState.position;
+    } else if (predictedResult && predictedResult.positions.length > 0) {
+        activePosition = predictedResult.positions[0];
+    }
+
+    for (const planet of planets) {
+        if (!planet.influenceMesh || !planet.influenceShell) continue;
+
+        let highlighted = planet === selectedPlanet;
+
+        if (activePosition) {
+            const distance = planet.positionAt(simTime).distanceTo(activePosition);
+            if (distance <= planet.influenceRadius) {
+                highlighted = true;
+            }
+        }
+
+        const shellOpacity = highlighted ? 0.16 : planet.name === "Sun" ? 0.035 : 0.065;
+        const ringOpacity = highlighted ? 0.95 : 0.55;
+
+        planet.influenceShell.material.opacity = shellOpacity;
+        planet.influenceMesh.material.opacity = ringOpacity;
+
+        if (highlighted) {
+            planet.influenceShell.scale.setScalar(1.02 + 0.015 * Math.sin(performance.now() * 0.004));
+        } else {
+            planet.influenceShell.scale.setScalar(1);
+        }
+    }
 }
 
 function focusPlanet(planet) {
@@ -889,7 +994,7 @@ function handleHover(event) {
         hits[0].object.scale.set(1.45, 1.45, 1.45);
         hoverRing.visible = true;
         hoverRing.position.copy(position);
-        hoverRing.scale.setScalar(Math.max(0.8, planet.visualRadius / 12));
+        hoverRing.scale.setScalar(Math.max(0.8, planet.visualScaledRadius / 12));
         renderer.domElement.style.cursor = "pointer";
     } else if (hoverRing) {
         hoverRing.visible = false;
@@ -946,10 +1051,7 @@ ui.savePlanet.addEventListener("click", () => {
     selectedPlanet.massScale = Number(ui.massScale.value);
     selectedPlanet.radiusScale = Number(ui.radiusScale.value);
 
-    const oldGeometry = selectedPlanet.mesh.geometry;
-    selectedPlanet.mesh.geometry = new THREE.SphereGeometry(selectedPlanet.visualRadius, 40, 40);
-    oldGeometry.dispose();
-
+    updatePlanetVisualGeometry(selectedPlanet);
     resetToSliderTime();
 });
 
@@ -1010,6 +1112,10 @@ window.addEventListener("resize", () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+
+    if (lastChartSpeeds.length > 0) {
+        drawChart(lastChartSpeeds, lastChartLabel, ui.chart);
+    }
 });
 
 function animate() {
@@ -1030,6 +1136,7 @@ function animate() {
         actualMarker.position.copy(actualState.position);
     }
 
+    updateInfluenceVisuals();
     applyCameraLock();
 
     controls.update();
