@@ -27,6 +27,15 @@
             <label>출발 시각 <span id="time-value">0</span></label>
             <input id="start-time" type="range" min="0" max="900" value="0" step="1">
 
+            <label>태양계 모드</label>
+            <select id="system-mode">
+                <option value="custom">Custom Solar System</option>
+                <option value="real">Real Scaled Solar System</option>
+            </select>
+
+            <label>기준 날짜</label>
+            <input id="date-input" type="date" value="2026-05-20">
+
             <div class="button-row wide">
                 <button id="launch">발사</button>
                 <button id="pause">멈춤</button>
@@ -65,6 +74,6 @@
     </div>
 </div>
 
-<script type="module" src="/static/main.js?v=10"></script>
+<script type="module" src="/static/main.js?v=20"></script>
 </body>
 </html>

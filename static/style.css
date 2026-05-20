@@ -71,6 +71,7 @@ html, body {
     color: white;
     cursor: pointer;
     font-size: 18px;
+    transition: left 0.35s ease, right 0.35s ease, transform 0.35s ease, opacity 0.35s ease;
 }
 
 .left-toggle {
@@ -79,6 +80,14 @@ html, body {
 
 .right-toggle {
     right: 370px;
+}
+
+.left-toggle.collapsed {
+    left: 18px;
+}
+
+.right-toggle.collapsed {
+    right: 18px;
 }
 
 h1 {
@@ -101,6 +110,18 @@ label {
 input[type="range"] {
     width: 100%;
     accent-color: #a65ad8;
+}
+
+select,
+input[type="date"] {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid rgba(120, 170, 255, 0.28);
+    border-radius: 10px;
+    background: rgba(4, 8, 18, 0.9);
+    color: white;
+    box-sizing: border-box;
 }
 
 button {
