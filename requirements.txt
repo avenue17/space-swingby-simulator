@@ -1,6 +1,2 @@
-gradio
-numpy
-plotly
-pandas
 fastapi
-uvicorn
+uvicorn[standard]
