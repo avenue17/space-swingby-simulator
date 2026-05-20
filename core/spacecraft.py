@@ -1,59 +1,31 @@
-from dataclasses import dataclass
-import numpy as np
-from utils.constants import SOFTENING
+\import numpy as np
+from utils.constants import SPACECRAFT_START_POSITION
 
 
-@dataclass
-class Planet:
-    name: str
-    base_mass: float
-    base_radius: float
-    orbit_radius: float
-    angular_speed: float
-    initial_angle: float
-    base_influence_radius: float
-    color: str
-    mass_scale: float = 1.0
-    radius_scale: float = 1.0
-    influence_scale: float = 1.0
+class Spacecraft:
+    def __init__(self):
+        self.initial_position = np.array(SPACECRAFT_START_POSITION, dtype=float)
+        self.position = self.initial_position.copy()
+        self.velocity = np.zeros(3, dtype=float)
+        self.trajectory = []
+        self.velocity_history = []
 
-    @property
-    def mass(self):
-        return self.base_mass * self.mass_scale
-
-    @property
-    def radius(self):
-        return self.base_radius * self.radius_scale
-
-    @property
-    def influence_radius(self):
-        value = self.base_influence_radius * self.influence_scale
-        return max(value, self.radius * 1.5)
-
-    def position_at(self, t):
-        if self.orbit_radius == 0:
-            return np.array([0.0, 0.0, 0.0], dtype=float)
-
-        angle = self.angular_speed * t + self.initial_angle
-        return np.array([
-            self.orbit_radius * np.cos(angle),
-            self.orbit_radius * np.sin(angle),
+    def reset(self, speed, angle_degrees):
+        self.position = self.initial_position.copy()
+        angle = np.deg2rad(angle_degrees)
+        self.velocity = np.array([
+            speed * np.cos(angle),
+            speed * np.sin(angle),
             0.0
         ], dtype=float)
+        self.trajectory = [self.position.copy()]
+        self.velocity_history = [self.velocity.copy()]
 
-    def gravity_acceleration(self, spacecraft_position, t, gravitational_constant):
-        planet_position = self.position_at(t)
-        direction = planet_position - spacecraft_position
-        distance = np.linalg.norm(direction)
-        safe_distance = max(distance, SOFTENING)
-        return gravitational_constant * self.mass * direction / (safe_distance ** 3)
+    def update(self, acceleration, dt):
+        self.velocity = self.velocity + acceleration * dt
+        self.position = self.position + self.velocity * dt
+        self.trajectory.append(self.position.copy())
+        self.velocity_history.append(self.velocity.copy())
 
-    def set_scales(self, mass_scale, radius_scale, influence_scale):
-        self.mass_scale = float(mass_scale)
-        self.radius_scale = float(radius_scale)
-        self.influence_scale = float(influence_scale)
-
-    def reset(self):
-        self.mass_scale = 1.0
-        self.radius_scale = 1.0
-        self.influence_scale = 1.0
+    def speed(self):
+        return float(np.linalg.norm(self.velocity))
