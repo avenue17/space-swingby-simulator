@@ -69,9 +69,11 @@ const ui = {
     chartModal: document.getElementById("chart-modal"),
     closeChart: document.getElementById("close-chart"),
     bigChart: document.getElementById("big-speed-chart"),
+    speed05x: document.getElementById("speed-05x"),
     speed1x: document.getElementById("speed-1x"),
     speed2x: document.getElementById("speed-2x"),
     speed5x: document.getElementById("speed-5x"),
+    cameraLock: document.getElementById("camera-lock"),
     back1: document.getElementById("back-1"),
     back5: document.getElementById("back-5"),
     leftPanel: document.getElementById("left-panel"),
@@ -184,6 +186,9 @@ let playScale = 1;
 let accumulator = 0;
 let lastChartSpeeds = [];
 let lastChartLabel = "speed";
+
+let cameraLocked = false;
+let cameraLockOffset = new THREE.Vector3(240, 220, 240);
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.65);
 scene.add(ambient);
@@ -667,6 +672,7 @@ function updateInfo() {
         `[태양계 설정]
 모드: ${ui.systemMode.value === "real" ? "Real Scaled Solar System" : "Custom Solar System"}
 기준 날짜: ${ui.dateInput.value}
+시점 고정: ${cameraLocked ? "ON" : "OFF"}
 
 [예상 궤적]
 예상 초기 속도: ${predictedResult.initialSpeed.toFixed(2)}
@@ -762,6 +768,9 @@ function loadSelectedPlanet() {
 }
 
 function focusPlanet(planet) {
+    cameraLocked = false;
+    updateCameraLockButton();
+
     const position = planet.positionAt(simTime);
     controls.target.copy(position);
 
@@ -772,10 +781,59 @@ function focusPlanet(planet) {
 }
 
 function resetCamera() {
+    cameraLocked = false;
+    updateCameraLockButton();
+
     controls.target.set(0, 0, 0);
     camera.position.set(900, 900, 900);
     camera.lookAt(0, 0, 0);
     controls.update();
+}
+
+function getCameraLockTarget() {
+    if (actualState) {
+        return actualState.position.clone();
+    }
+
+    const earth = planets.find((planet) => planet.name === "Earth");
+    if (earth) {
+        return earth.positionAt(simTime);
+    }
+
+    return new THREE.Vector3(0, 0, 0);
+}
+
+function updateCameraLockButton() {
+    ui.cameraLock.textContent = cameraLocked ? "시점 고정 ON" : "시점 고정 OFF";
+}
+
+function toggleCameraLock() {
+    cameraLocked = !cameraLocked;
+
+    if (cameraLocked) {
+        const target = getCameraLockTarget();
+        cameraLockOffset.copy(camera.position.clone().sub(controls.target));
+
+        if (cameraLockOffset.length() < 80) {
+            cameraLockOffset.set(240, 220, 240);
+        }
+
+        controls.target.copy(target);
+        camera.position.copy(target.clone().add(cameraLockOffset));
+        camera.lookAt(target);
+    }
+
+    updateCameraLockButton();
+    updateInfo();
+}
+
+function applyCameraLock() {
+    if (!cameraLocked) return;
+
+    const target = getCameraLockTarget();
+    controls.target.copy(target);
+    camera.position.copy(target.clone().add(cameraLockOffset));
+    camera.lookAt(target);
 }
 
 function clearActual() {
@@ -904,9 +962,12 @@ ui.play.addEventListener("click", playActual);
 ui.pause.addEventListener("click", pauseActual);
 ui.resetFlight.addEventListener("click", resetFlight);
 
+ui.speed05x.addEventListener("click", () => resumeActual(0.5));
 ui.speed1x.addEventListener("click", () => resumeActual(1));
 ui.speed2x.addEventListener("click", () => resumeActual(2));
 ui.speed5x.addEventListener("click", () => resumeActual(5));
+
+ui.cameraLock.addEventListener("click", toggleCameraLock);
 
 ui.back1.addEventListener("click", () => moveBack(1));
 ui.back5.addEventListener("click", () => moveBack(5));
@@ -969,6 +1030,8 @@ function animate() {
         actualMarker.position.copy(actualState.position);
     }
 
+    applyCameraLock();
+
     controls.update();
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
@@ -976,5 +1039,6 @@ function animate() {
 
 makeStars();
 updateUIValues();
+updateCameraLockButton();
 rebuildSolarSystem();
 animate();
