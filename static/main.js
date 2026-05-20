@@ -1,5 +1,5 @@
-import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import * as THREE from "https://esm.sh/three@0.164.1";
+import { OrbitControls } from "https://esm.sh/three@0.164.1/examples/jsm/controls/OrbitControls.js";
 
 const G = 0.9;
 const DT = 0.18;
@@ -118,6 +118,7 @@ const defaultPlanets = [
 ];
 
 const planets = defaultPlanets.map(data => new Planet(data));
+
 let selectedPlanet = planets.find(planet => planet.name === "Earth");
 let trajectoryLine = null;
 let startMarker = null;
@@ -127,11 +128,11 @@ let currentResult = null;
 let playScale = 0;
 let playAccumulator = 0;
 
-const ambient = new THREE.AmbientLight(0xffffff, 0.38);
+const ambient = new THREE.AmbientLight(0xffffff, 0.42);
 scene.add(ambient);
 
-const sunLight = new THREE.PointLight(0xffffff, 2.4, 2500);
-sunLight.position.set(0, 150, 0);
+const sunLight = new THREE.PointLight(0xffffff, 2.6, 2800);
+sunLight.position.set(0, 180, 0);
 scene.add(sunLight);
 
 function makeCircle(radius, color, opacity, y = 0, segments = 192) {
@@ -159,11 +160,11 @@ function makeCircle(radius, color, opacity, y = 0, segments = 192) {
 }
 
 function makeStars() {
-    const count = 1000;
+    const count = 1200;
     const positions = [];
 
     for (let i = 0; i < count; i++) {
-        const r = 1600 + Math.random() * 1200;
+        const r = 1600 + Math.random() * 1500;
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
 
@@ -179,28 +180,18 @@ function makeStars() {
 
     const material = new THREE.PointsMaterial({
         color: 0xffffff,
-        size: 1.3,
+        size: 1.4,
         transparent: true,
-        opacity: 0.65
+        opacity: 0.68
     });
 
-    const stars = new THREE.Points(geometry, material);
-    scene.add(stars);
+    scene.add(new THREE.Points(geometry, material));
 }
 
 function visualRadiusOf(planet) {
-    if (planet.name === "Sun") {
-        return 16;
-    }
-
-    if (planet.name === "Jupiter") {
-        return 8;
-    }
-
-    if (planet.name === "Saturn") {
-        return 7;
-    }
-
+    if (planet.name === "Sun") return 16;
+    if (planet.name === "Jupiter") return 8;
+    if (planet.name === "Saturn") return 7;
     return 4.5;
 }
 
@@ -279,7 +270,7 @@ function simulate() {
         initialSpeed * Math.sin(angle)
     );
 
-    const rawPositions = [position.clone()];
+    const positions = [position.clone()];
     const speeds = [velocity.length()];
     const times = [startTime];
 
@@ -295,7 +286,7 @@ function simulate() {
         position.add(velocity.clone().multiplyScalar(DT));
 
         if (i % interval === 0) {
-            rawPositions.push(position.clone());
+            positions.push(position.clone());
             speeds.push(velocity.length());
             times.push(t);
         }
@@ -309,17 +300,12 @@ function simulate() {
             }
         }
 
-        if (collision) {
-            break;
-        }
-
-        if (position.length() > 1100) {
-            break;
-        }
+        if (collision) break;
+        if (position.length() > 1100) break;
     }
 
     currentResult = {
-        positions: rawPositions,
+        positions,
         speeds,
         times,
         collision,
@@ -365,7 +351,6 @@ function drawTrajectory() {
         new THREE.SphereGeometry(4, 18, 18),
         new THREE.MeshBasicMaterial({ color: 0x00ff66 })
     );
-
     startMarker.position.copy(currentResult.positions[0]);
     scene.add(startMarker);
 
@@ -373,7 +358,6 @@ function drawTrajectory() {
         new THREE.SphereGeometry(5, 18, 18),
         new THREE.MeshBasicMaterial({ color: 0xff3333 })
     );
-
     endMarker.position.copy(currentResult.positions[currentResult.positions.length - 1]);
     scene.add(endMarker);
 }
@@ -443,11 +427,8 @@ function drawChart() {
         const x = speeds.length === 1 ? 0 : i / (speeds.length - 1) * width;
         const y = height - ((speeds[i] - minSpeed) / range * (height - 24) + 12);
 
-        if (i === 0) {
-            context.moveTo(x, y);
-        } else {
-            context.lineTo(x, y);
-        }
+        if (i === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
     }
 
     context.stroke();
@@ -527,9 +508,7 @@ function handleHover(event) {
 }
 
 function handleClick(event) {
-    if (event.target !== renderer.domElement) {
-        return;
-    }
+    if (event.target !== renderer.domElement) return;
 
     mouse.x = event.clientX / window.innerWidth * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
