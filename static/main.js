@@ -1,3 +1,5 @@
+// static/main.js - Three.js 기반 3D 태양계 스윙바이 시뮬레이터의 물리 계산, 렌더링, UI 이벤트 처리
+
 import * as THREE from "https://esm.sh/three@0.164.1";
 import { OrbitControls } from "https://esm.sh/three@0.164.1/examples/jsm/controls/OrbitControls.js";
 
@@ -96,7 +98,6 @@ class Planet {
         this.radiusScale = 1;
         this.mesh = null;
         this.influenceMesh = null;
-        this.influenceShell = null;
         this.orbitMesh = null;
     }
 
@@ -260,8 +261,7 @@ function makeCircle(radius, color, opacity, y = 0, segments = 240) {
     const material = new THREE.LineBasicMaterial({
         color,
         transparent: true,
-        opacity,
-        depthWrite: false
+        opacity
     });
 
     return new THREE.Line(geometry, material);
@@ -316,21 +316,8 @@ function buildPlanetObjects() {
         planet.mesh.userData.planet = planet;
         scene.add(planet.mesh);
 
-        planet.influenceMesh = makeCircle(planet.influenceRadius, 0x58f0ff, 0.55, 2.0, 220);
+        planet.influenceMesh = makeCircle(planet.influenceRadius, 0x4da3ff, 0.30, 2.0, 180);
         scene.add(planet.influenceMesh);
-
-        planet.influenceShell = new THREE.Mesh(
-            new THREE.SphereGeometry(planet.influenceRadius, 32, 18),
-            new THREE.MeshBasicMaterial({
-                color: 0x58f0ff,
-                transparent: true,
-                opacity: planet.name === "Sun" ? 0.035 : 0.065,
-                wireframe: true,
-                depthWrite: false
-            })
-        );
-        planet.influenceShell.userData.planet = planet;
-        scene.add(planet.influenceShell);
     }
 
     hoverRing = makeCircle(22, 0xffffff, 0.9, 3.0, 120);
@@ -358,7 +345,6 @@ function clearPlanetObjects() {
     for (const planet of planets) {
         disposeObject(planet.mesh);
         disposeObject(planet.influenceMesh);
-        disposeObject(planet.influenceShell);
         disposeObject(planet.orbitMesh);
     }
 
@@ -410,7 +396,6 @@ function updatePlanetPositions(t) {
 
         if (planet.mesh) planet.mesh.position.copy(position);
         if (planet.influenceMesh) planet.influenceMesh.position.copy(position);
-        if (planet.influenceShell) planet.influenceShell.position.copy(position);
     }
 }
 
@@ -736,7 +721,7 @@ ${actualText}
 현재 태양계 시간: ${simTime.toFixed(2)}
 청록색: 예상 궤적
 노란색: 실제 궤적
-청록색 와이어 구: 중력권`;
+파란색 원: 중력권`;
 }
 
 function drawChart(speeds, label, targetCanvas = ui.chart) {
@@ -826,49 +811,8 @@ function updatePlanetVisualGeometry(planet) {
 
     if (planet.influenceMesh) {
         const oldGeometry = planet.influenceMesh.geometry;
-        planet.influenceMesh.geometry = makeCircle(planet.influenceRadius, 0x58f0ff, 0.55, 2.0, 220).geometry;
+        planet.influenceMesh.geometry = makeCircle(planet.influenceRadius, 0x4da3ff, 0.30, 2.0, 180).geometry;
         oldGeometry.dispose();
-    }
-
-    if (planet.influenceShell) {
-        const oldGeometry = planet.influenceShell.geometry;
-        planet.influenceShell.geometry = new THREE.SphereGeometry(planet.influenceRadius, 32, 18);
-        oldGeometry.dispose();
-    }
-}
-
-function updateInfluenceVisuals() {
-    let activePosition = null;
-
-    if (actualState) {
-        activePosition = actualState.position;
-    } else if (predictedResult && predictedResult.positions.length > 0) {
-        activePosition = predictedResult.positions[0];
-    }
-
-    for (const planet of planets) {
-        if (!planet.influenceMesh || !planet.influenceShell) continue;
-
-        let highlighted = planet === selectedPlanet;
-
-        if (activePosition) {
-            const distance = planet.positionAt(simTime).distanceTo(activePosition);
-            if (distance <= planet.influenceRadius) {
-                highlighted = true;
-            }
-        }
-
-        const shellOpacity = highlighted ? 0.16 : planet.name === "Sun" ? 0.035 : 0.065;
-        const ringOpacity = highlighted ? 0.95 : 0.55;
-
-        planet.influenceShell.material.opacity = shellOpacity;
-        planet.influenceMesh.material.opacity = ringOpacity;
-
-        if (highlighted) {
-            planet.influenceShell.scale.setScalar(1.02 + 0.015 * Math.sin(performance.now() * 0.004));
-        } else {
-            planet.influenceShell.scale.setScalar(1);
-        }
     }
 }
 
@@ -1136,7 +1080,6 @@ function animate() {
         actualMarker.position.copy(actualState.position);
     }
 
-    updateInfluenceVisuals();
     applyCameraLock();
 
     controls.update();
