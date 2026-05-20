@@ -9,23 +9,33 @@
 <div id="app">
     <div id="viewport"></div>
 
+    <button id="toggle-left" class="panel-toggle left-toggle">☰</button>
+    <button id="toggle-right" class="panel-toggle right-toggle">☷</button>
+
     <div id="left-panel">
         <h1>Solar Swingby Simulator</h1>
 
         <section>
             <h2>우주선 설정</h2>
+
             <label>발사각 <span id="angle-value">25</span>°</label>
             <input id="angle" type="range" min="0" max="360" value="25" step="1">
 
             <label>초기 속도 <span id="speed-value">18</span></label>
-            <input id="speed" type="range" min="1" max="60" value="18" step="0.5">
+            <input id="speed" type="range" min="1" max="80" value="18" step="0.5">
 
             <label>출발 시각 <span id="time-value">0</span></label>
-            <input id="start-time" type="range" min="0" max="500" value="0" step="1">
+            <input id="start-time" type="range" min="0" max="900" value="0" step="1">
+
+            <div class="button-row wide">
+                <button id="launch">발사</button>
+                <button id="pause">멈춤</button>
+            </div>
         </section>
 
         <section>
             <h2>행성 설정</h2>
+
             <div id="selected-planet">선택된 행성: Earth</div>
 
             <label>질량 배율 <span id="mass-value">1.0</span></label>
@@ -34,8 +44,10 @@
             <label>반지름 배율 <span id="radius-value">1.0</span></label>
             <input id="radius-scale" type="range" min="0.5" max="3" value="1" step="0.1">
 
-            <button id="save-planet">Save</button>
-            <button id="reset-planets">태양계 초기화</button>
+            <div class="button-row wide">
+                <button id="save-planet">Save</button>
+                <button id="reset-planets">태양계 초기화</button>
+            </div>
         </section>
     </div>
 
@@ -48,11 +60,11 @@
             <button id="back-5">5초 전</button>
         </div>
 
-        <div id="info"></div>
+        <div id="info">loading...</div>
         <canvas id="speed-chart"></canvas>
     </div>
 </div>
 
-<script type="module" src="/static/main.js"></script>
+<script type="module" src="/static/main.js?v=10"></script>
 </body>
 </html>

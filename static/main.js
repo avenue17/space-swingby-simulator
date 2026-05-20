@@ -2,10 +2,10 @@ import * as THREE from "https://esm.sh/three@0.164.1";
 import { OrbitControls } from "https://esm.sh/three@0.164.1/examples/jsm/controls/OrbitControls.js";
 
 const G = 0.9;
-const DT = 0.18;
-const DURATION = 220;
+const DT = 0.16;
+const DURATION = 620;
 const SOFTENING = 8;
-const MAX_POINTS = 900;
+const MAX_POINTS = 2600;
 
 const viewport = document.getElementById("viewport");
 
@@ -16,10 +16,10 @@ const camera = new THREE.PerspectiveCamera(
     60,
     window.innerWidth / window.innerHeight,
     0.1,
-    5000
+    7000
 );
 
-camera.position.set(520, 520, 520);
+camera.position.set(720, 720, 720);
 camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({
@@ -37,7 +37,7 @@ controls.target.set(0, 0, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 80;
-controls.maxDistance = 1800;
+controls.maxDistance = 2600;
 controls.update();
 
 const raycaster = new THREE.Raycaster();
@@ -58,14 +58,19 @@ const ui = {
     radiusValue: document.getElementById("radius-value"),
     savePlanet: document.getElementById("save-planet"),
     resetPlanets: document.getElementById("reset-planets"),
+    launch: document.getElementById("launch"),
+    pause: document.getElementById("pause"),
     info: document.getElementById("info"),
     chart: document.getElementById("speed-chart"),
-    pause: document.getElementById("pause"),
     speed1x: document.getElementById("speed-1x"),
     speed2x: document.getElementById("speed-2x"),
     speed5x: document.getElementById("speed-5x"),
     back1: document.getElementById("back-1"),
-    back5: document.getElementById("back-5")
+    back5: document.getElementById("back-5"),
+    leftPanel: document.getElementById("left-panel"),
+    rightPanel: document.getElementById("right-panel"),
+    toggleLeft: document.getElementById("toggle-left"),
+    toggleRight: document.getElementById("toggle-right")
 };
 
 class Planet {
@@ -97,6 +102,8 @@ class Planet {
         if (this.name === "Sun") return 32;
         if (this.name === "Jupiter") return 18;
         if (this.name === "Saturn") return 15;
+        if (this.name === "Uranus") return 13;
+        if (this.name === "Neptune") return 13;
         if (this.name === "Earth") return 12;
         if (this.name === "Venus") return 11;
         if (this.name === "Mars") return 10;
@@ -124,76 +131,17 @@ class Planet {
 }
 
 const defaultPlanets = [
-    {
-        name: "Sun",
-        mass: 12000,
-        radius: 28,
-        orbitRadius: 0,
-        angularSpeed: 0,
-        initialAngle: 0,
-        influenceRadius: 130,
-        color: 0xffcc33
-    },
-    {
-        name: "Mercury",
-        mass: 90,
-        radius: 5,
-        orbitRadius: 80,
-        angularSpeed: 0.045,
-        initialAngle: 0.4,
-        influenceRadius: 24,
-        color: 0x999999
-    },
-    {
-        name: "Venus",
-        mass: 210,
-        radius: 8,
-        orbitRadius: 125,
-        angularSpeed: 0.032,
-        initialAngle: 1.1,
-        influenceRadius: 38,
-        color: 0xffa64d
-    },
-    {
-        name: "Earth",
-        mass: 280,
-        radius: 9,
-        orbitRadius: 180,
-        angularSpeed: 0.024,
-        initialAngle: 2.0,
-        influenceRadius: 50,
-        color: 0x3a7bff
-    },
-    {
-        name: "Mars",
-        mass: 170,
-        radius: 7,
-        orbitRadius: 250,
-        angularSpeed: 0.018,
-        initialAngle: 2.8,
-        influenceRadius: 45,
-        color: 0xff5533
-    },
-    {
-        name: "Jupiter",
-        mass: 1300,
-        radius: 20,
-        orbitRadius: 390,
-        angularSpeed: 0.010,
-        initialAngle: 4.0,
-        influenceRadius: 105,
-        color: 0xd6a36a
-    },
-    {
-        name: "Saturn",
-        mass: 950,
-        radius: 17,
-        orbitRadius: 520,
-        angularSpeed: 0.007,
-        initialAngle: 5.0,
-        influenceRadius: 95,
-        color: 0xe6d28a
-    }
+    { name: "Sun", mass: 12000, radius: 28, orbitRadius: 0, angularSpeed: 0, initialAngle: 0, influenceRadius: 135, color: 0xffcc33 },
+    { name: "Mercury", mass: 90, radius: 5, orbitRadius: 80, angularSpeed: 0.045, initialAngle: 0.4, influenceRadius: 24, color: 0x999999 },
+    { name: "Venus", mass: 210, radius: 8, orbitRadius: 125, angularSpeed: 0.032, initialAngle: 1.1, influenceRadius: 38, color: 0xffa64d },
+    { name: "Earth", mass: 280, radius: 9, orbitRadius: 180, angularSpeed: 0.024, initialAngle: 2.0, influenceRadius: 52, color: 0x3a7bff },
+    { name: "Mars", mass: 170, radius: 7, orbitRadius: 250, angularSpeed: 0.018, initialAngle: 2.8, influenceRadius: 45, color: 0xff5533 },
+    { name: "Ceres", mass: 75, radius: 5, orbitRadius: 315, angularSpeed: 0.014, initialAngle: 3.3, influenceRadius: 28, color: 0xb0a090 },
+    { name: "Jupiter", mass: 1300, radius: 20, orbitRadius: 420, angularSpeed: 0.010, initialAngle: 4.0, influenceRadius: 112, color: 0xd6a36a },
+    { name: "Saturn", mass: 950, radius: 17, orbitRadius: 560, angularSpeed: 0.007, initialAngle: 5.0, influenceRadius: 102, color: 0xe6d28a },
+    { name: "Uranus", mass: 620, radius: 14, orbitRadius: 710, angularSpeed: 0.005, initialAngle: 5.7, influenceRadius: 88, color: 0x7fd4d9 },
+    { name: "Neptune", mass: 660, radius: 14, orbitRadius: 850, angularSpeed: 0.004, initialAngle: 0.9, influenceRadius: 90, color: 0x4169e1 },
+    { name: "Pluto", mass: 45, radius: 4, orbitRadius: 980, angularSpeed: 0.003, initialAngle: 1.7, influenceRadius: 24, color: 0xc9b18a }
 ];
 
 const planets = defaultPlanets.map((data) => new Planet(data));
@@ -206,20 +154,21 @@ let hoverRing = null;
 let currentResult = null;
 let playScale = 0;
 let playAccumulator = 0;
+let launched = false;
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.65);
 scene.add(ambient);
 
-const sunLight = new THREE.PointLight(0xffffff, 3.0, 3000);
+const sunLight = new THREE.PointLight(0xffffff, 3.0, 4000);
 sunLight.position.set(0, 300, 0);
 scene.add(sunLight);
 
-const helperGrid = new THREE.GridHelper(1400, 28, 0x1d3557, 0x0b1a2d);
+const helperGrid = new THREE.GridHelper(2400, 48, 0x1d3557, 0x0b1a2d);
 helperGrid.material.transparent = true;
-helperGrid.material.opacity = 0.22;
+helperGrid.material.opacity = 0.18;
 scene.add(helperGrid);
 
-function makeCircle(radius, color, opacity, y = 0, segments = 192) {
+function makeCircle(radius, color, opacity, y = 0, segments = 240) {
     const points = [];
 
     for (let i = 0; i <= segments; i++) {
@@ -244,11 +193,11 @@ function makeCircle(radius, color, opacity, y = 0, segments = 192) {
 }
 
 function makeStars() {
-    const count = 1400;
+    const count = 1800;
     const positions = [];
 
     for (let i = 0; i < count; i++) {
-        const r = 1700 + Math.random() * 1600;
+        const r = 2200 + Math.random() * 2200;
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
 
@@ -275,7 +224,7 @@ function makeStars() {
 function buildPlanetObjects() {
     for (const planet of planets) {
         if (planet.orbitRadius > 0) {
-            planet.orbitMesh = makeCircle(planet.orbitRadius, 0x888888, 0.38, 0, 240);
+            planet.orbitMesh = makeCircle(planet.orbitRadius, 0x888888, 0.34, 0, 260);
             scene.add(planet.orbitMesh);
         }
 
@@ -292,7 +241,7 @@ function buildPlanetObjects() {
         planet.mesh.userData.planet = planet;
         scene.add(planet.mesh);
 
-        planet.influenceMesh = makeCircle(planet.influenceRadius, 0x4da3ff, 0.32, 2.0, 180);
+        planet.influenceMesh = makeCircle(planet.influenceRadius, 0x4da3ff, 0.30, 2.0, 180);
         scene.add(planet.influenceMesh);
     }
 
@@ -320,9 +269,7 @@ function startPosition(t) {
     const earthPosition = earth.positionAt(t);
     const direction = earthPosition.clone().normalize();
 
-    return earthPosition.clone().add(
-        direction.multiplyScalar(earth.radius * 2.5)
-    );
+    return earthPosition.clone().add(direction.multiplyScalar(earth.radius * 2.5));
 }
 
 function totalAcceleration(position, t) {
@@ -384,7 +331,7 @@ function simulate() {
         }
 
         if (collision) break;
-        if (position.length() > 1400) break;
+        if (position.length() > 2200) break;
     }
 
     currentResult = {
@@ -481,7 +428,8 @@ function updateInfo() {
 가장 가까운 천체: ${closestName}
 최소 접근 거리: ${closestDistance.toFixed(2)}
 충돌 여부: ${currentResult.collision ?? "없음"}
-스윙바이 판정: ${success ? "성공 가능" : "미충족"}`;
+스윙바이 판정: ${success ? "성공 가능" : "미충족"}
+계산 궤적 점 수: ${currentResult.positions.length}`;
 }
 
 function drawChart() {
@@ -546,7 +494,7 @@ function focusPlanet(planet) {
     const position = planet.positionAt(Number(ui.startTime.value));
     controls.target.copy(position);
 
-    const offset = new THREE.Vector3(120, 120, 120);
+    const offset = new THREE.Vector3(140, 140, 140);
     camera.position.copy(position.clone().add(offset));
     camera.lookAt(position);
     controls.update();
@@ -554,16 +502,13 @@ function focusPlanet(planet) {
 
 function resetCamera() {
     controls.target.set(0, 0, 0);
-    camera.position.set(520, 520, 520);
+    camera.position.set(900, 900, 900);
     camera.lookAt(0, 0, 0);
     controls.update();
 }
 
 function moveTime(delta) {
-    const next = Math.max(
-        0,
-        Math.min(500, Number(ui.startTime.value) + delta)
-    );
+    const next = Math.max(0, Math.min(900, Number(ui.startTime.value) + delta));
 
     ui.startTime.value = next.toFixed(0);
     updateUIValues();
@@ -622,12 +567,28 @@ function handleClick(event) {
     }
 }
 
-for (const input of [ui.angle, ui.speed, ui.startTime]) {
+function launch() {
+    launched = true;
+    playScale = 1;
+}
+
+function pause() {
+    launched = false;
+    playScale = 0;
+}
+
+for (const input of [ui.angle, ui.speed]) {
     input.addEventListener("input", () => {
         updateUIValues();
         simulate();
     });
 }
+
+ui.startTime.addEventListener("input", () => {
+    pause();
+    updateUIValues();
+    simulate();
+});
 
 ui.massScale.addEventListener("input", updateUIValues);
 ui.radiusScale.addEventListener("input", updateUIValues);
@@ -655,35 +616,44 @@ ui.resetPlanets.addEventListener("click", () => {
     selectedPlanet = planets.find((planet) => planet.name === "Earth");
     loadSelectedPlanet();
     resetCamera();
+    pause();
     simulate();
 });
 
-if (ui.pause) {
-    ui.pause.addEventListener("click", () => {
-        playScale = 0;
-    });
-}
+ui.launch.addEventListener("click", launch);
+ui.pause.addEventListener("click", pause);
 
 ui.speed1x.addEventListener("click", () => {
+    launched = true;
     playScale = 1;
 });
 
 ui.speed2x.addEventListener("click", () => {
+    launched = true;
     playScale = 2;
 });
 
 ui.speed5x.addEventListener("click", () => {
+    launched = true;
     playScale = 5;
 });
 
 ui.back1.addEventListener("click", () => {
-    playScale = 0;
+    pause();
     moveTime(-1);
 });
 
 ui.back5.addEventListener("click", () => {
-    playScale = 0;
+    pause();
     moveTime(-5);
+});
+
+ui.toggleLeft.addEventListener("click", () => {
+    ui.leftPanel.classList.toggle("collapsed");
+});
+
+ui.toggleRight.addEventListener("click", () => {
+    ui.rightPanel.classList.toggle("collapsed");
 });
 
 window.addEventListener("mousemove", handleHover);
@@ -698,15 +668,19 @@ window.addEventListener("resize", () => {
 function animate() {
     const delta = clock.getDelta();
 
-    if (playScale > 0) {
+    if (launched && playScale > 0) {
         playAccumulator += delta;
 
-        if (playAccumulator > 0.12) {
+        if (playAccumulator > 0.08) {
             const next = Number(ui.startTime.value) + playAccumulator * playScale;
-            ui.startTime.value = Math.min(500, next).toFixed(1);
+            ui.startTime.value = Math.min(900, next).toFixed(1);
             playAccumulator = 0;
             updateUIValues();
             simulate();
+
+            if (Number(ui.startTime.value) >= 900) {
+                pause();
+            }
         }
     }
 
