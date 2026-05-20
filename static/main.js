@@ -19,7 +19,7 @@ const camera = new THREE.PerspectiveCamera(
     7000
 );
 
-camera.position.set(720, 720, 720);
+camera.position.set(900, 900, 900);
 camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({
@@ -147,14 +147,20 @@ const defaultPlanets = [
 const planets = defaultPlanets.map((data) => new Planet(data));
 
 let selectedPlanet = planets.find((planet) => planet.name === "Earth");
-let trajectoryLine = null;
-let startMarker = null;
-let endMarker = null;
+
+let predictedLine = null;
+let predictedStartMarker = null;
+let predictedEndMarker = null;
+
+let actualLine = null;
+let actualMarker = null;
+
 let hoverRing = null;
-let currentResult = null;
+let predictedResult = null;
+
+let actualState = null;
 let playScale = 0;
-let playAccumulator = 0;
-let launched = false;
+let simulationAccumulator = 0;
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.65);
 scene.add(ambient);
@@ -272,6 +278,18 @@ function startPosition(t) {
     return earthPosition.clone().add(direction.multiplyScalar(earth.radius * 2.5));
 }
 
+function initialVelocity() {
+    const angleDegrees = Number(ui.angle.value);
+    const initialSpeed = Number(ui.speed.value);
+    const angle = (angleDegrees * Math.PI) / 180;
+
+    return new THREE.Vector3(
+        initialSpeed * Math.cos(angle),
+        0,
+        initialSpeed * Math.sin(angle)
+    );
+}
+
 function totalAcceleration(position, t) {
     const acceleration = new THREE.Vector3(0, 0, 0);
 
@@ -287,18 +305,12 @@ function totalAcceleration(position, t) {
     return acceleration;
 }
 
-function simulate() {
-    const angleDegrees = Number(ui.angle.value);
-    const initialSpeed = Number(ui.speed.value);
+function computePredictedTrajectory() {
     const startTime = Number(ui.startTime.value);
-    const angle = (angleDegrees * Math.PI) / 180;
+    const initialSpeed = Number(ui.speed.value);
 
     let position = startPosition(startTime);
-    let velocity = new THREE.Vector3(
-        initialSpeed * Math.cos(angle),
-        0,
-        initialSpeed * Math.sin(angle)
-    );
+    let velocity = initialVelocity();
 
     const positions = [position.clone()];
     const speeds = [velocity.length()];
@@ -334,7 +346,7 @@ function simulate() {
         if (position.length() > 2200) break;
     }
 
-    currentResult = {
+    predictedResult = {
         positions,
         speeds,
         times,
@@ -343,8 +355,8 @@ function simulate() {
     };
 
     updatePlanetPositions(startTime);
-    drawTrajectory();
-    drawChart();
+    drawPredictedTrajectory();
+    drawChart(predictedResult.speeds, "predicted speed");
     updateInfo();
 }
 
@@ -362,77 +374,187 @@ function disposeObject(object) {
     }
 }
 
-function drawTrajectory() {
-    disposeObject(trajectoryLine);
-    disposeObject(startMarker);
-    disposeObject(endMarker);
+function drawPredictedTrajectory() {
+    disposeObject(predictedLine);
+    disposeObject(predictedStartMarker);
+    disposeObject(predictedEndMarker);
 
-    const geometry = new THREE.BufferGeometry().setFromPoints(currentResult.positions);
+    const geometry = new THREE.BufferGeometry().setFromPoints(predictedResult.positions);
     const material = new THREE.LineBasicMaterial({
         color: 0x58f0ff,
         transparent: true,
-        opacity: 0.98
+        opacity: 0.75
     });
 
-    trajectoryLine = new THREE.Line(geometry, material);
-    scene.add(trajectoryLine);
+    predictedLine = new THREE.Line(geometry, material);
+    scene.add(predictedLine);
 
-    startMarker = new THREE.Mesh(
+    predictedStartMarker = new THREE.Mesh(
         new THREE.SphereGeometry(7, 20, 20),
         new THREE.MeshBasicMaterial({ color: 0x00ff66 })
     );
-    startMarker.position.copy(currentResult.positions[0]);
-    scene.add(startMarker);
+    predictedStartMarker.position.copy(predictedResult.positions[0]);
+    scene.add(predictedStartMarker);
 
-    endMarker = new THREE.Mesh(
+    predictedEndMarker = new THREE.Mesh(
         new THREE.SphereGeometry(8, 20, 20),
         new THREE.MeshBasicMaterial({ color: 0xff3333 })
     );
-    endMarker.position.copy(currentResult.positions[currentResult.positions.length - 1]);
-    scene.add(endMarker);
+    predictedEndMarker.position.copy(predictedResult.positions[predictedResult.positions.length - 1]);
+    scene.add(predictedEndMarker);
+}
+
+function resetActualTrajectoryObjects() {
+    disposeObject(actualLine);
+    disposeObject(actualMarker);
+    actualLine = null;
+    actualMarker = null;
+}
+
+function launchActual() {
+    const startTime = Number(ui.startTime.value);
+    const position = startPosition(startTime);
+    const velocity = initialVelocity();
+
+    actualState = {
+        active: true,
+        paused: false,
+        startTime,
+        elapsed: 0,
+        position,
+        velocity,
+        positions: [position.clone()],
+        speeds: [velocity.length()],
+        collision: null
+    };
+
+    playScale = 1;
+    resetActualTrajectoryObjects();
+    drawActualTrajectory();
+    updateInfo();
+}
+
+function pauseActual() {
+    if (actualState) {
+        actualState.paused = true;
+    }
+
+    playScale = 0;
+}
+
+function stepActual(dt) {
+    if (!actualState || !actualState.active || actualState.paused) return;
+
+    const t = actualState.startTime + actualState.elapsed;
+    const acceleration = totalAcceleration(actualState.position, t);
+
+    actualState.velocity.add(acceleration.multiplyScalar(dt));
+    actualState.position.add(actualState.velocity.clone().multiplyScalar(dt));
+    actualState.elapsed += dt;
+
+    actualState.positions.push(actualState.position.clone());
+    actualState.speeds.push(actualState.velocity.length());
+
+    for (const planet of planets) {
+        const distance = planet.positionAt(t).distanceTo(actualState.position);
+
+        if (distance < planet.radius) {
+            actualState.collision = planet.name;
+            actualState.active = false;
+            playScale = 0;
+            break;
+        }
+    }
+
+    if (actualState.position.length() > 2200 || actualState.elapsed > DURATION) {
+        actualState.active = false;
+        playScale = 0;
+    }
+
+    updatePlanetPositions(actualState.startTime + actualState.elapsed);
+    drawActualTrajectory();
+    drawChart(actualState.speeds, "actual speed");
+    updateInfo();
+}
+
+function drawActualTrajectory() {
+    disposeObject(actualLine);
+    disposeObject(actualMarker);
+
+    const geometry = new THREE.BufferGeometry().setFromPoints(actualState.positions);
+    const material = new THREE.LineBasicMaterial({
+        color: 0xffd84d,
+        transparent: true,
+        opacity: 1.0
+    });
+
+    actualLine = new THREE.Line(geometry, material);
+    scene.add(actualLine);
+
+    actualMarker = new THREE.Mesh(
+        new THREE.SphereGeometry(9, 20, 20),
+        new THREE.MeshBasicMaterial({ color: 0xffd84d })
+    );
+    actualMarker.position.copy(actualState.position);
+    scene.add(actualMarker);
 }
 
 function updateInfo() {
-    const speeds = currentResult.speeds;
-    const finalSpeed = speeds[speeds.length - 1];
-    const maxSpeed = Math.max(...speeds);
-    const speedGain = finalSpeed - currentResult.initialSpeed;
+    const predictedSpeeds = predictedResult.speeds;
+    const predictedFinalSpeed = predictedSpeeds[predictedSpeeds.length - 1];
+    const predictedMaxSpeed = Math.max(...predictedSpeeds);
+    const predictedSpeedGain = predictedFinalSpeed - predictedResult.initialSpeed;
 
-    let closestName = "";
-    let closestDistance = Infinity;
+    let predictedClosestName = "";
+    let predictedClosestDistance = Infinity;
 
-    for (let i = 0; i < currentResult.positions.length; i++) {
-        const position = currentResult.positions[i];
-        const t = currentResult.times[i];
+    for (let i = 0; i < predictedResult.positions.length; i++) {
+        const position = predictedResult.positions[i];
+        const t = predictedResult.times[i];
 
         for (const planet of planets) {
             const distance = planet.positionAt(t).distanceTo(position);
 
-            if (distance < closestDistance) {
-                closestDistance = distance;
-                closestName = planet.name;
+            if (distance < predictedClosestDistance) {
+                predictedClosestDistance = distance;
+                predictedClosestName = planet.name;
             }
         }
     }
 
-    const success =
-        speedGain > 0.5 &&
-        currentResult.collision === null &&
-        closestName !== "Sun";
+    let actualText = "실제 비행: 아직 발사 안 됨";
+
+    if (actualState) {
+        const actualCurrentSpeed = actualState.velocity.length();
+        const actualMaxSpeed = Math.max(...actualState.speeds);
+        const actualTime = actualState.elapsed;
+        const actualStatus = actualState.collision ? `충돌: ${actualState.collision}` : actualState.active ? "비행 중" : "종료";
+
+        actualText =
+            `실제 비행 시간: ${actualTime.toFixed(2)}
+실제 현재 속도: ${actualCurrentSpeed.toFixed(2)}
+실제 최대 속도: ${actualMaxSpeed.toFixed(2)}
+실제 상태: ${actualStatus}`;
+    }
 
     ui.info.textContent =
-        `초기 속도: ${currentResult.initialSpeed.toFixed(2)}
-최종 속도: ${finalSpeed.toFixed(2)}
-최대 속도: ${maxSpeed.toFixed(2)}
-속도 변화량: ${speedGain.toFixed(2)}
-가장 가까운 천체: ${closestName}
-최소 접근 거리: ${closestDistance.toFixed(2)}
-충돌 여부: ${currentResult.collision ?? "없음"}
-스윙바이 판정: ${success ? "성공 가능" : "미충족"}
-계산 궤적 점 수: ${currentResult.positions.length}`;
+        `[예상 궤적]
+예상 초기 속도: ${predictedResult.initialSpeed.toFixed(2)}
+예상 최종 속도: ${predictedFinalSpeed.toFixed(2)}
+예상 최대 속도: ${predictedMaxSpeed.toFixed(2)}
+예상 속도 변화량: ${predictedSpeedGain.toFixed(2)}
+예상 최소 접근 천체: ${predictedClosestName}
+예상 최소 접근 거리: ${predictedClosestDistance.toFixed(2)}
+예상 충돌 여부: ${predictedResult.collision ?? "없음"}
+
+[실제 궤적]
+${actualText}
+
+청록색: 예상 궤적
+노란색: 실제 궤적`;
 }
 
-function drawChart() {
+function drawChart(speeds, label) {
     const canvas = ui.chart;
     const context = canvas.getContext("2d");
 
@@ -448,7 +570,6 @@ function drawChart() {
     context.fillStyle = "rgba(0, 0, 0, 0.35)";
     context.fillRect(0, 0, width, height);
 
-    const speeds = currentResult.speeds;
     const minSpeed = Math.min(...speeds);
     const maxSpeed = Math.max(...speeds);
     const range = Math.max(maxSpeed - minSpeed, 1);
@@ -472,7 +593,7 @@ function drawChart() {
 
     context.fillStyle = "white";
     context.font = "12px Arial";
-    context.fillText("speed graph", 10, 18);
+    context.fillText(label, 10, 18);
 }
 
 function updateUIValues() {
@@ -511,8 +632,10 @@ function moveTime(delta) {
     const next = Math.max(0, Math.min(900, Number(ui.startTime.value) + delta));
 
     ui.startTime.value = next.toFixed(0);
+    actualState = null;
+    resetActualTrajectoryObjects();
     updateUIValues();
-    simulate();
+    computePredictedTrajectory();
 }
 
 function handleHover(event) {
@@ -567,27 +690,20 @@ function handleClick(event) {
     }
 }
 
-function launch() {
-    launched = true;
-    playScale = 1;
-}
-
-function pause() {
-    launched = false;
-    playScale = 0;
-}
-
 for (const input of [ui.angle, ui.speed]) {
     input.addEventListener("input", () => {
+        actualState = null;
+        resetActualTrajectoryObjects();
         updateUIValues();
-        simulate();
+        computePredictedTrajectory();
     });
 }
 
 ui.startTime.addEventListener("input", () => {
-    pause();
+    actualState = null;
+    resetActualTrajectoryObjects();
     updateUIValues();
-    simulate();
+    computePredictedTrajectory();
 });
 
 ui.massScale.addEventListener("input", updateUIValues);
@@ -605,7 +721,9 @@ ui.savePlanet.addEventListener("click", () => {
     );
     oldGeometry.dispose();
 
-    simulate();
+    actualState = null;
+    resetActualTrajectoryObjects();
+    computePredictedTrajectory();
 });
 
 ui.resetPlanets.addEventListener("click", () => {
@@ -614,46 +732,67 @@ ui.resetPlanets.addEventListener("click", () => {
     }
 
     selectedPlanet = planets.find((planet) => planet.name === "Earth");
+    actualState = null;
+    resetActualTrajectoryObjects();
     loadSelectedPlanet();
     resetCamera();
-    pause();
-    simulate();
+    computePredictedTrajectory();
 });
 
-ui.launch.addEventListener("click", launch);
-ui.pause.addEventListener("click", pause);
+ui.launch.addEventListener("click", () => {
+    launchActual();
+});
+
+ui.pause.addEventListener("click", () => {
+    pauseActual();
+});
 
 ui.speed1x.addEventListener("click", () => {
-    launched = true;
+    if (!actualState) launchActual();
+    actualState.paused = false;
     playScale = 1;
 });
 
 ui.speed2x.addEventListener("click", () => {
-    launched = true;
+    if (!actualState) launchActual();
+    actualState.paused = false;
     playScale = 2;
 });
 
 ui.speed5x.addEventListener("click", () => {
-    launched = true;
+    if (!actualState) launchActual();
+    actualState.paused = false;
     playScale = 5;
 });
 
 ui.back1.addEventListener("click", () => {
-    pause();
     moveTime(-1);
 });
 
 ui.back5.addEventListener("click", () => {
-    pause();
     moveTime(-5);
 });
 
 ui.toggleLeft.addEventListener("click", () => {
     ui.leftPanel.classList.toggle("collapsed");
+    ui.toggleLeft.classList.toggle("collapsed");
+
+    if (ui.leftPanel.classList.contains("collapsed")) {
+        ui.toggleLeft.textContent = "›";
+    } else {
+        ui.toggleLeft.textContent = "☰";
+    }
 });
 
 ui.toggleRight.addEventListener("click", () => {
     ui.rightPanel.classList.toggle("collapsed");
+    ui.toggleRight.classList.toggle("collapsed");
+
+    if (ui.rightPanel.classList.contains("collapsed")) {
+        ui.toggleRight.textContent = "‹";
+    } else {
+        ui.toggleRight.textContent = "☷";
+    }
 });
 
 window.addEventListener("mousemove", handleHover);
@@ -668,19 +807,12 @@ window.addEventListener("resize", () => {
 function animate() {
     const delta = clock.getDelta();
 
-    if (launched && playScale > 0) {
-        playAccumulator += delta;
+    if (actualState && actualState.active && !actualState.paused && playScale > 0) {
+        simulationAccumulator += delta * playScale;
 
-        if (playAccumulator > 0.08) {
-            const next = Number(ui.startTime.value) + playAccumulator * playScale;
-            ui.startTime.value = Math.min(900, next).toFixed(1);
-            playAccumulator = 0;
-            updateUIValues();
-            simulate();
-
-            if (Number(ui.startTime.value) >= 900) {
-                pause();
-            }
+        while (simulationAccumulator >= DT) {
+            stepActual(DT);
+            simulationAccumulator -= DT;
         }
     }
 
@@ -693,6 +825,6 @@ makeStars();
 buildPlanetObjects();
 updateUIValues();
 loadSelectedPlanet();
-simulate();
+computePredictedTrajectory();
 resetCamera();
 animate();
