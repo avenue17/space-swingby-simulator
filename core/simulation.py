@@ -1,6 +1,6 @@
 import numpy as np
 from core.spacecraft import Spacecraft
-from utils.constants import G, DEFAULT_DT, DEFAULT_DURATION, PLOT_LIMIT
+from utils.constants import G, DEFAULT_DT, DEFAULT_DURATION, PLOT_LIMIT, MAX_TRAJECTORY_POINTS
 
 
 class Simulation:
@@ -32,6 +32,12 @@ class Simulation:
         velocities = np.array(spacecraft.velocity_history)
         times = np.array([start_time] + times[:len(trajectory) - 1])
 
+        if len(trajectory) > MAX_TRAJECTORY_POINTS:
+            idx = np.linspace(0, len(trajectory) - 1, MAX_TRAJECTORY_POINTS).astype(int)
+            trajectory = trajectory[idx]
+            velocities = velocities[idx]
+            times = times[idx]
+
         return {
             "trajectory": trajectory,
             "velocities": velocities,
@@ -46,14 +52,18 @@ class Simulation:
 
     def _total_acceleration(self, position, t):
         acceleration = np.zeros(3, dtype=float)
+
         for planet in self.solar_system.planets:
             acceleration += planet.gravity_acceleration(position, t, G)
+
         return acceleration
 
     def _check_collision(self, position, t):
         for planet in self.solar_system.planets:
             planet_position = planet.position_at(t)
             distance = np.linalg.norm(position - planet_position)
+
             if distance <= planet.radius:
                 return planet.name
+
         return None
