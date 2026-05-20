@@ -7,12 +7,13 @@ const PREDICT_DT = 0.18;
 const DURATION = 900;
 const SOFTENING = 8;
 const MAX_POINTS = 3500;
-const TIME_FLOW = 10;
+const TIME_FLOW = 25;
 
 const viewport = document.getElementById("viewport");
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
+scene.fog = new THREE.FogExp2(0x02030a, 0.00022);
 
 const camera = new THREE.PerspectiveCamera(
     60,
@@ -60,9 +61,14 @@ const ui = {
     savePlanet: document.getElementById("save-planet"),
     resetPlanets: document.getElementById("reset-planets"),
     launch: document.getElementById("launch"),
+    play: document.getElementById("play"),
     pause: document.getElementById("pause"),
+    resetFlight: document.getElementById("reset-flight"),
     info: document.getElementById("info"),
     chart: document.getElementById("speed-chart"),
+    chartModal: document.getElementById("chart-modal"),
+    closeChart: document.getElementById("close-chart"),
+    bigChart: document.getElementById("big-speed-chart"),
     speed1x: document.getElementById("speed-1x"),
     speed2x: document.getElementById("speed-2x"),
     speed5x: document.getElementById("speed-5x"),
@@ -176,6 +182,8 @@ let simTime = Number(ui.startTime.value);
 let running = false;
 let playScale = 1;
 let accumulator = 0;
+let lastChartSpeeds = [];
+let lastChartLabel = "speed";
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.65);
 scene.add(ambient);
@@ -533,6 +541,19 @@ function pauseActual() {
     if (actualState) {
         actualState.paused = true;
     }
+
+    updateInfo();
+}
+
+function playActual() {
+    if (!actualState) {
+        launchActual();
+        return;
+    }
+
+    running = true;
+    actualState.paused = false;
+    updateInfo();
 }
 
 function resumeActual(scale) {
@@ -543,6 +564,7 @@ function resumeActual(scale) {
     running = true;
     playScale = scale;
     actualState.paused = false;
+    updateInfo();
 }
 
 function stepActual(dt) {
@@ -663,8 +685,13 @@ ${actualText}
 노란색: 실제 궤적`;
 }
 
-function drawChart(speeds, label) {
-    const canvas = ui.chart;
+function drawChart(speeds, label, targetCanvas = ui.chart) {
+    if (targetCanvas === ui.chart) {
+        lastChartSpeeds = [...speeds];
+        lastChartLabel = label;
+    }
+
+    const canvas = targetCanvas;
     const context = canvas.getContext("2d");
 
     const width = canvas.clientWidth;
@@ -676,20 +703,31 @@ function drawChart(speeds, label) {
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
 
     context.clearRect(0, 0, width, height);
-    context.fillStyle = "rgba(0, 0, 0, 0.35)";
+
+    const gradient = context.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, "rgba(88, 240, 255, 0.12)");
+    gradient.addColorStop(1, "rgba(0, 0, 0, 0.35)");
+    context.fillStyle = gradient;
     context.fillRect(0, 0, width, height);
+
+    if (!speeds || speeds.length === 0) {
+        context.fillStyle = "white";
+        context.font = "13px Arial";
+        context.fillText("no speed data", 14, 24);
+        return;
+    }
 
     const minSpeed = Math.min(...speeds);
     const maxSpeed = Math.max(...speeds);
     const range = Math.max(maxSpeed - minSpeed, 1);
 
     context.strokeStyle = label.includes("actual") ? "#ffd84d" : "#58f0ff";
-    context.lineWidth = 2;
+    context.lineWidth = targetCanvas === ui.bigChart ? 3 : 2;
     context.beginPath();
 
     for (let i = 0; i < speeds.length; i++) {
         const x = speeds.length === 1 ? 0 : (i / (speeds.length - 1)) * width;
-        const y = height - ((speeds[i] - minSpeed) / range * (height - 24) + 12);
+        const y = height - ((speeds[i] - minSpeed) / range * (height - 40) + 20);
 
         if (i === 0) context.moveTo(x, y);
         else context.lineTo(x, y);
@@ -697,9 +735,13 @@ function drawChart(speeds, label) {
 
     context.stroke();
 
-    context.fillStyle = "white";
-    context.font = "12px Arial";
-    context.fillText(label, 10, 18);
+    context.fillStyle = "rgba(255,255,255,0.9)";
+    context.font = targetCanvas === ui.bigChart ? "16px Arial" : "12px Arial";
+    context.fillText(label, 14, 24);
+
+    context.fillStyle = "rgba(255,255,255,0.65)";
+    context.font = targetCanvas === ui.bigChart ? "13px Arial" : "11px Arial";
+    context.fillText(`min ${minSpeed.toFixed(2)}   max ${maxSpeed.toFixed(2)}`, 14, 44);
 }
 
 function updateUIValues() {
@@ -741,6 +783,20 @@ function clearActual() {
     actualState = null;
     accumulator = 0;
     resetActualObjects();
+    updatePlanetPositions(simTime);
+
+    if (predictedResult) {
+        drawChart(predictedResult.speeds, "predicted speed");
+    }
+
+    updateInfo();
+}
+
+function resetFlight() {
+    simTime = Number(ui.startTime.value);
+    clearActual();
+    updatePlanetPositions(simTime);
+    computePredictedTrajectory();
 }
 
 function resetToSliderTime() {
@@ -844,7 +900,9 @@ ui.resetPlanets.addEventListener("click", () => {
 });
 
 ui.launch.addEventListener("click", launchActual);
+ui.play.addEventListener("click", playActual);
 ui.pause.addEventListener("click", pauseActual);
+ui.resetFlight.addEventListener("click", resetFlight);
 
 ui.speed1x.addEventListener("click", () => resumeActual(1));
 ui.speed2x.addEventListener("click", () => resumeActual(2));
@@ -853,16 +911,35 @@ ui.speed5x.addEventListener("click", () => resumeActual(5));
 ui.back1.addEventListener("click", () => moveBack(1));
 ui.back5.addEventListener("click", () => moveBack(5));
 
+ui.chart.addEventListener("click", () => {
+    ui.chartModal.classList.remove("hidden");
+    drawChart(
+        lastChartSpeeds.length ? lastChartSpeeds : [0],
+        lastChartLabel,
+        ui.bigChart
+    );
+});
+
+ui.closeChart.addEventListener("click", () => {
+    ui.chartModal.classList.add("hidden");
+});
+
+ui.chartModal.addEventListener("click", (event) => {
+    if (event.target === ui.chartModal) {
+        ui.chartModal.classList.add("hidden");
+    }
+});
+
 ui.toggleLeft.addEventListener("click", () => {
-    ui.leftPanel.classList.toggle("collapsed");
-    ui.toggleLeft.classList.toggle("collapsed");
-    ui.toggleLeft.textContent = ui.leftPanel.classList.contains("collapsed") ? "›" : "☰";
+    const collapsed = ui.leftPanel.classList.toggle("collapsed");
+    ui.toggleLeft.classList.toggle("collapsed", collapsed);
+    ui.toggleLeft.textContent = collapsed ? "›" : "☰";
 });
 
 ui.toggleRight.addEventListener("click", () => {
-    ui.rightPanel.classList.toggle("collapsed");
-    ui.toggleRight.classList.toggle("collapsed");
-    ui.toggleRight.textContent = ui.rightPanel.classList.contains("collapsed") ? "‹" : "☷";
+    const collapsed = ui.rightPanel.classList.toggle("collapsed");
+    ui.toggleRight.classList.toggle("collapsed", collapsed);
+    ui.toggleRight.textContent = collapsed ? "‹" : "☷";
 });
 
 window.addEventListener("mousemove", handleHover);

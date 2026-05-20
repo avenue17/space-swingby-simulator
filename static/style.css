@@ -247,11 +247,19 @@ button:active {
         inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
+#play {
+    background: linear-gradient(180deg, #38bdf8, #0369a1);
+}
+
 #pause {
     background: linear-gradient(180deg, #f05a5a, #a92626);
     box-shadow:
         0 10px 25px rgba(239, 68, 68, 0.24),
         inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+#reset-flight {
+    background: linear-gradient(180deg, #f59e0b, #b45309);
 }
 
 #save-planet {
@@ -340,8 +348,8 @@ button:active {
 }
 
 .modal-content {
-    width: min(900px, 88vw);
-    height: min(560px, 78vh);
+    width: min(920px, 88vw);
+    height: min(580px, 78vh);
     padding: 20px;
     border-radius: 22px;
     background: rgba(8, 13, 28, 0.96);
@@ -366,7 +374,9 @@ button:active {
 #big-speed-chart {
     width: 100%;
     height: calc(100% - 54px);
-    background: rgba(0, 0, 0, 0.35);
+    background:
+        linear-gradient(180deg, rgba(88, 240, 255, 0.08), rgba(0, 0, 0, 0.30)),
+        rgba(0, 0, 0, 0.35);
     border-radius: 16px;
     border: 1px solid rgba(120, 170, 255, 0.18);
 }
