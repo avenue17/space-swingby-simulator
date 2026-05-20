@@ -19,12 +19,17 @@ const camera = new THREE.PerspectiveCamera(
     5000
 );
 
-camera.position.set(0, 760, 0.1);
+camera.position.set(520, 520, 520);
 camera.lookAt(0, 0, 0);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: false
+});
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0x000000, 1);
+renderer.domElement.style.display = "block";
 viewport.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -33,6 +38,7 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 80;
 controls.maxDistance = 1800;
+controls.update();
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -87,6 +93,16 @@ class Planet {
         return this.baseRadius * this.radiusScale;
     }
 
+    get visualRadius() {
+        if (this.name === "Sun") return 32;
+        if (this.name === "Jupiter") return 18;
+        if (this.name === "Saturn") return 15;
+        if (this.name === "Earth") return 12;
+        if (this.name === "Venus") return 11;
+        if (this.name === "Mars") return 10;
+        return 8;
+    }
+
     positionAt(t) {
         if (this.orbitRadius === 0) {
             return new THREE.Vector3(0, 0, 0);
@@ -108,18 +124,81 @@ class Planet {
 }
 
 const defaultPlanets = [
-    { name: "Sun", mass: 12000, radius: 28, orbitRadius: 0, angularSpeed: 0, initialAngle: 0, influenceRadius: 130, color: 0xffcc33 },
-    { name: "Mercury", mass: 90, radius: 5, orbitRadius: 80, angularSpeed: 0.045, initialAngle: 0.4, influenceRadius: 24, color: 0x999999 },
-    { name: "Venus", mass: 210, radius: 8, orbitRadius: 125, angularSpeed: 0.032, initialAngle: 1.1, influenceRadius: 38, color: 0xffa64d },
-    { name: "Earth", mass: 280, radius: 9, orbitRadius: 180, angularSpeed: 0.024, initialAngle: 2.0, influenceRadius: 50, color: 0x3a7bff },
-    { name: "Mars", mass: 170, radius: 7, orbitRadius: 250, angularSpeed: 0.018, initialAngle: 2.8, influenceRadius: 45, color: 0xff5533 },
-    { name: "Jupiter", mass: 1300, radius: 20, orbitRadius: 390, angularSpeed: 0.010, initialAngle: 4.0, influenceRadius: 105, color: 0xd6a36a },
-    { name: "Saturn", mass: 950, radius: 17, orbitRadius: 520, angularSpeed: 0.007, initialAngle: 5.0, influenceRadius: 95, color: 0xe6d28a }
+    {
+        name: "Sun",
+        mass: 12000,
+        radius: 28,
+        orbitRadius: 0,
+        angularSpeed: 0,
+        initialAngle: 0,
+        influenceRadius: 130,
+        color: 0xffcc33
+    },
+    {
+        name: "Mercury",
+        mass: 90,
+        radius: 5,
+        orbitRadius: 80,
+        angularSpeed: 0.045,
+        initialAngle: 0.4,
+        influenceRadius: 24,
+        color: 0x999999
+    },
+    {
+        name: "Venus",
+        mass: 210,
+        radius: 8,
+        orbitRadius: 125,
+        angularSpeed: 0.032,
+        initialAngle: 1.1,
+        influenceRadius: 38,
+        color: 0xffa64d
+    },
+    {
+        name: "Earth",
+        mass: 280,
+        radius: 9,
+        orbitRadius: 180,
+        angularSpeed: 0.024,
+        initialAngle: 2.0,
+        influenceRadius: 50,
+        color: 0x3a7bff
+    },
+    {
+        name: "Mars",
+        mass: 170,
+        radius: 7,
+        orbitRadius: 250,
+        angularSpeed: 0.018,
+        initialAngle: 2.8,
+        influenceRadius: 45,
+        color: 0xff5533
+    },
+    {
+        name: "Jupiter",
+        mass: 1300,
+        radius: 20,
+        orbitRadius: 390,
+        angularSpeed: 0.010,
+        initialAngle: 4.0,
+        influenceRadius: 105,
+        color: 0xd6a36a
+    },
+    {
+        name: "Saturn",
+        mass: 950,
+        radius: 17,
+        orbitRadius: 520,
+        angularSpeed: 0.007,
+        initialAngle: 5.0,
+        influenceRadius: 95,
+        color: 0xe6d28a
+    }
 ];
 
-const planets = defaultPlanets.map(data => new Planet(data));
+const planets = defaultPlanets.map((data) => new Planet(data));
 
-let selectedPlanet = planets.find(planet => planet.name === "Earth");
+let selectedPlanet = planets.find((planet) => planet.name === "Earth");
 let trajectoryLine = null;
 let startMarker = null;
 let endMarker = null;
@@ -128,18 +207,23 @@ let currentResult = null;
 let playScale = 0;
 let playAccumulator = 0;
 
-const ambient = new THREE.AmbientLight(0xffffff, 0.42);
+const ambient = new THREE.AmbientLight(0xffffff, 0.65);
 scene.add(ambient);
 
-const sunLight = new THREE.PointLight(0xffffff, 2.6, 2800);
-sunLight.position.set(0, 180, 0);
+const sunLight = new THREE.PointLight(0xffffff, 3.0, 3000);
+sunLight.position.set(0, 300, 0);
 scene.add(sunLight);
+
+const helperGrid = new THREE.GridHelper(1400, 28, 0x1d3557, 0x0b1a2d);
+helperGrid.material.transparent = true;
+helperGrid.material.opacity = 0.22;
+scene.add(helperGrid);
 
 function makeCircle(radius, color, opacity, y = 0, segments = 192) {
     const points = [];
 
     for (let i = 0; i <= segments; i++) {
-        const angle = i / segments * Math.PI * 2;
+        const angle = (i / segments) * Math.PI * 2;
         points.push(
             new THREE.Vector3(
                 radius * Math.cos(angle),
@@ -160,11 +244,11 @@ function makeCircle(radius, color, opacity, y = 0, segments = 192) {
 }
 
 function makeStars() {
-    const count = 1200;
+    const count = 1400;
     const positions = [];
 
     for (let i = 0; i < count; i++) {
-        const r = 1600 + Math.random() * 1500;
+        const r = 1700 + Math.random() * 1600;
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
 
@@ -180,34 +264,27 @@ function makeStars() {
 
     const material = new THREE.PointsMaterial({
         color: 0xffffff,
-        size: 1.4,
+        size: 1.6,
         transparent: true,
-        opacity: 0.68
+        opacity: 0.72
     });
 
     scene.add(new THREE.Points(geometry, material));
 }
 
-function visualRadiusOf(planet) {
-    if (planet.name === "Sun") return 16;
-    if (planet.name === "Jupiter") return 8;
-    if (planet.name === "Saturn") return 7;
-    return 4.5;
-}
-
 function buildPlanetObjects() {
     for (const planet of planets) {
         if (planet.orbitRadius > 0) {
-            planet.orbitMesh = makeCircle(planet.orbitRadius, 0x777777, 0.28, 0, 220);
+            planet.orbitMesh = makeCircle(planet.orbitRadius, 0x888888, 0.38, 0, 240);
             scene.add(planet.orbitMesh);
         }
 
-        const geometry = new THREE.SphereGeometry(visualRadiusOf(planet), 36, 36);
+        const geometry = new THREE.SphereGeometry(planet.visualRadius, 40, 40);
         const material = new THREE.MeshStandardMaterial({
             color: planet.color,
             emissive: planet.name === "Sun" ? planet.color : 0x000000,
-            emissiveIntensity: planet.name === "Sun" ? 0.9 : 0.04,
-            roughness: 0.8,
+            emissiveIntensity: planet.name === "Sun" ? 1.1 : 0.08,
+            roughness: 0.75,
             metalness: 0.05
         });
 
@@ -215,11 +292,11 @@ function buildPlanetObjects() {
         planet.mesh.userData.planet = planet;
         scene.add(planet.mesh);
 
-        planet.influenceMesh = makeCircle(planet.influenceRadius, 0x4da3ff, 0.26, 1.0, 160);
+        planet.influenceMesh = makeCircle(planet.influenceRadius, 0x4da3ff, 0.32, 2.0, 180);
         scene.add(planet.influenceMesh);
     }
 
-    hoverRing = makeCircle(16, 0xffffff, 0.85, 1.5, 96);
+    hoverRing = makeCircle(22, 0xffffff, 0.9, 3.0, 120);
     hoverRing.visible = false;
     scene.add(hoverRing);
 }
@@ -227,13 +304,19 @@ function buildPlanetObjects() {
 function updatePlanetPositions(t) {
     for (const planet of planets) {
         const position = planet.positionAt(t);
-        planet.mesh.position.copy(position);
-        planet.influenceMesh.position.copy(position);
+
+        if (planet.mesh) {
+            planet.mesh.position.copy(position);
+        }
+
+        if (planet.influenceMesh) {
+            planet.influenceMesh.position.copy(position);
+        }
     }
 }
 
 function startPosition(t) {
-    const earth = planets.find(planet => planet.name === "Earth");
+    const earth = planets.find((planet) => planet.name === "Earth");
     const earthPosition = earth.positionAt(t);
     const direction = earthPosition.clone().normalize();
 
@@ -261,7 +344,7 @@ function simulate() {
     const angleDegrees = Number(ui.angle.value);
     const initialSpeed = Number(ui.speed.value);
     const startTime = Number(ui.startTime.value);
-    const angle = angleDegrees * Math.PI / 180;
+    const angle = (angleDegrees * Math.PI) / 180;
 
     let position = startPosition(startTime);
     let velocity = new THREE.Vector3(
@@ -301,7 +384,7 @@ function simulate() {
         }
 
         if (collision) break;
-        if (position.length() > 1100) break;
+        if (position.length() > 1400) break;
     }
 
     currentResult = {
@@ -312,50 +395,50 @@ function simulate() {
         initialSpeed
     };
 
+    updatePlanetPositions(startTime);
     drawTrajectory();
     drawChart();
     updateInfo();
-    updatePlanetPositions(startTime);
+}
+
+function disposeObject(object) {
+    if (!object) return;
+
+    scene.remove(object);
+
+    if (object.geometry) {
+        object.geometry.dispose();
+    }
+
+    if (object.material) {
+        object.material.dispose();
+    }
 }
 
 function drawTrajectory() {
-    if (trajectoryLine !== null) {
-        scene.remove(trajectoryLine);
-        trajectoryLine.geometry.dispose();
-        trajectoryLine.material.dispose();
-    }
-
-    if (startMarker !== null) {
-        scene.remove(startMarker);
-        startMarker.geometry.dispose();
-        startMarker.material.dispose();
-    }
-
-    if (endMarker !== null) {
-        scene.remove(endMarker);
-        endMarker.geometry.dispose();
-        endMarker.material.dispose();
-    }
+    disposeObject(trajectoryLine);
+    disposeObject(startMarker);
+    disposeObject(endMarker);
 
     const geometry = new THREE.BufferGeometry().setFromPoints(currentResult.positions);
     const material = new THREE.LineBasicMaterial({
         color: 0x58f0ff,
         transparent: true,
-        opacity: 0.95
+        opacity: 0.98
     });
 
     trajectoryLine = new THREE.Line(geometry, material);
     scene.add(trajectoryLine);
 
     startMarker = new THREE.Mesh(
-        new THREE.SphereGeometry(4, 18, 18),
+        new THREE.SphereGeometry(7, 20, 20),
         new THREE.MeshBasicMaterial({ color: 0x00ff66 })
     );
     startMarker.position.copy(currentResult.positions[0]);
     scene.add(startMarker);
 
     endMarker = new THREE.Mesh(
-        new THREE.SphereGeometry(5, 18, 18),
+        new THREE.SphereGeometry(8, 20, 20),
         new THREE.MeshBasicMaterial({ color: 0xff3333 })
     );
     endMarker.position.copy(currentResult.positions[currentResult.positions.length - 1]);
@@ -385,7 +468,10 @@ function updateInfo() {
         }
     }
 
-    const success = speedGain > 0.5 && currentResult.collision === null && closestName !== "Sun";
+    const success =
+        speedGain > 0.5 &&
+        currentResult.collision === null &&
+        closestName !== "Sun";
 
     ui.info.textContent =
         `초기 속도: ${currentResult.initialSpeed.toFixed(2)}
@@ -424,11 +510,14 @@ function drawChart() {
     context.beginPath();
 
     for (let i = 0; i < speeds.length; i++) {
-        const x = speeds.length === 1 ? 0 : i / (speeds.length - 1) * width;
+        const x = speeds.length === 1 ? 0 : (i / (speeds.length - 1)) * width;
         const y = height - ((speeds[i] - minSpeed) / range * (height - 24) + 12);
 
-        if (i === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
+        if (i === 0) {
+            context.moveTo(x, y);
+        } else {
+            context.lineTo(x, y);
+        }
     }
 
     context.stroke();
@@ -457,13 +546,17 @@ function focusPlanet(planet) {
     const position = planet.positionAt(Number(ui.startTime.value));
     controls.target.copy(position);
 
-    const offset = new THREE.Vector3(90, 90, 90);
+    const offset = new THREE.Vector3(120, 120, 120);
     camera.position.copy(position.clone().add(offset));
+    camera.lookAt(position);
+    controls.update();
 }
 
 function resetCamera() {
     controls.target.set(0, 0, 0);
-    camera.position.set(0, 760, 0.1);
+    camera.position.set(520, 520, 520);
+    camera.lookAt(0, 0, 0);
+    controls.update();
 }
 
 function moveTime(delta) {
@@ -478,18 +571,20 @@ function moveTime(delta) {
 }
 
 function handleHover(event) {
-    mouse.x = event.clientX / window.innerWidth * 2 - 1;
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
     raycaster.setFromCamera(mouse, camera);
 
     const hits = raycaster.intersectObjects(
-        planets.map(planet => planet.mesh),
+        planets.map((planet) => planet.mesh),
         false
     );
 
     for (const planet of planets) {
-        planet.mesh.scale.set(1, 1, 1);
+        if (planet.mesh) {
+            planet.mesh.scale.set(1, 1, 1);
+        }
     }
 
     if (hits.length > 0) {
@@ -499,7 +594,7 @@ function handleHover(event) {
         hits[0].object.scale.set(1.45, 1.45, 1.45);
         hoverRing.visible = true;
         hoverRing.position.copy(position);
-        hoverRing.scale.setScalar(Math.max(0.75, visualRadiusOf(planet) / 8));
+        hoverRing.scale.setScalar(Math.max(0.8, planet.visualRadius / 12));
         renderer.domElement.style.cursor = "pointer";
     } else {
         hoverRing.visible = false;
@@ -510,13 +605,13 @@ function handleHover(event) {
 function handleClick(event) {
     if (event.target !== renderer.domElement) return;
 
-    mouse.x = event.clientX / window.innerWidth * 2 - 1;
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
     raycaster.setFromCamera(mouse, camera);
 
     const hits = raycaster.intersectObjects(
-        planets.map(planet => planet.mesh),
+        planets.map((planet) => planet.mesh),
         false
     );
 
@@ -540,6 +635,15 @@ ui.radiusScale.addEventListener("input", updateUIValues);
 ui.savePlanet.addEventListener("click", () => {
     selectedPlanet.massScale = Number(ui.massScale.value);
     selectedPlanet.radiusScale = Number(ui.radiusScale.value);
+
+    const oldGeometry = selectedPlanet.mesh.geometry;
+    selectedPlanet.mesh.geometry = new THREE.SphereGeometry(
+        selectedPlanet.visualRadius,
+        40,
+        40
+    );
+    oldGeometry.dispose();
+
     simulate();
 });
 
@@ -548,15 +652,17 @@ ui.resetPlanets.addEventListener("click", () => {
         planet.reset();
     }
 
-    selectedPlanet = planets.find(planet => planet.name === "Earth");
+    selectedPlanet = planets.find((planet) => planet.name === "Earth");
     loadSelectedPlanet();
     resetCamera();
     simulate();
 });
 
-ui.pause.addEventListener("click", () => {
-    playScale = 0;
-});
+if (ui.pause) {
+    ui.pause.addEventListener("click", () => {
+        playScale = 0;
+    });
+}
 
 ui.speed1x.addEventListener("click", () => {
     playScale = 1;
@@ -613,6 +719,6 @@ makeStars();
 buildPlanetObjects();
 updateUIValues();
 loadSelectedPlanet();
-resetCamera();
 simulate();
+resetCamera();
 animate();
