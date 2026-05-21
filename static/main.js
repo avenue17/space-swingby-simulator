@@ -6,7 +6,7 @@ import { OrbitControls } from "https://esm.sh/three@0.164.1/examples/jsm/control
 const G = 0.9;
 const DT = 0.08;
 const PREDICT_DT = 0.18;
-const DURATION = 900;
+const DURATION = 1800;
 const SOFTENING = 8;
 const MAX_POINTS = 3500;
 const TIME_FLOW = 25;
@@ -48,11 +48,13 @@ const clock = new THREE.Clock();
 
 const ui = {
     angle: document.getElementById("angle"),
+    verticalAngle: document.getElementById("vertical-angle"),
     speed: document.getElementById("speed"),
     startTime: document.getElementById("start-time"),
     systemMode: document.getElementById("system-mode"),
     dateInput: document.getElementById("date-input"),
     angleValue: document.getElementById("angle-value"),
+    verticalAngleValue: document.getElementById("vertical-angle-value"),
     speedValue: document.getElementById("speed-value"),
     timeValue: document.getElementById("time-value"),
     selectedPlanet: document.getElementById("selected-planet"),
@@ -93,6 +95,8 @@ class Planet {
         this.orbitRadius = data.orbitRadius;
         this.angularSpeed = data.angularSpeed;
         this.initialAngle = data.initialAngle;
+        this.inclination = (data.inclination ?? 0) * Math.PI / 180;
+        this.ascendingNode = (data.ascendingNode ?? 0) * Math.PI / 180;
         this.color = data.color;
         this.massScale = 1;
         this.radiusScale = 1;
@@ -129,6 +133,26 @@ class Planet {
         return this.visualRadius * this.radiusScale;
     }
 
+    orbitTransformVector(vector) {
+        const qNode = new THREE.Quaternion().setFromAxisAngle(
+            new THREE.Vector3(0, 1, 0),
+            this.ascendingNode
+        );
+
+        const nodeAxis = new THREE.Vector3(
+            Math.cos(this.ascendingNode),
+            0,
+            -Math.sin(this.ascendingNode)
+        ).normalize();
+
+        const qInclination = new THREE.Quaternion().setFromAxisAngle(
+            nodeAxis,
+            this.inclination
+        );
+
+        return vector.clone().applyQuaternion(qInclination).applyQuaternion(qNode);
+    }
+
     positionAt(t) {
         if (this.orbitRadius === 0) {
             return new THREE.Vector3(0, 0, 0);
@@ -136,11 +160,13 @@ class Planet {
 
         const angle = this.angularSpeed * t + this.initialAngle;
 
-        return new THREE.Vector3(
+        const flatPosition = new THREE.Vector3(
             this.orbitRadius * Math.cos(angle),
             0,
             this.orbitRadius * Math.sin(angle)
         );
+
+        return this.orbitTransformVector(flatPosition);
     }
 
     reset() {
@@ -150,30 +176,30 @@ class Planet {
 }
 
 const customPlanetData = [
-    { name: "Sun", mass: 12000, radius: 28, orbitRadius: 0, angularSpeed: 0, initialAngle: 0, influenceRadius: 135, color: 0xffcc33 },
-    { name: "Mercury", mass: 90, radius: 5, orbitRadius: 80, angularSpeed: 0.045, initialAngle: 0.4, influenceRadius: 24, color: 0x999999 },
-    { name: "Venus", mass: 210, radius: 8, orbitRadius: 125, angularSpeed: 0.032, initialAngle: 1.1, influenceRadius: 38, color: 0xffa64d },
-    { name: "Earth", mass: 280, radius: 9, orbitRadius: 180, angularSpeed: 0.024, initialAngle: 2.0, influenceRadius: 52, color: 0x3a7bff },
-    { name: "Mars", mass: 170, radius: 7, orbitRadius: 250, angularSpeed: 0.018, initialAngle: 2.8, influenceRadius: 45, color: 0xff5533 },
-    { name: "Ceres", mass: 75, radius: 5, orbitRadius: 315, angularSpeed: 0.014, initialAngle: 3.3, influenceRadius: 28, color: 0xb0a090 },
-    { name: "Jupiter", mass: 1300, radius: 20, orbitRadius: 420, angularSpeed: 0.010, initialAngle: 4.0, influenceRadius: 112, color: 0xd6a36a },
-    { name: "Saturn", mass: 950, radius: 17, orbitRadius: 560, angularSpeed: 0.007, initialAngle: 5.0, influenceRadius: 102, color: 0xe6d28a },
-    { name: "Uranus", mass: 620, radius: 14, orbitRadius: 710, angularSpeed: 0.005, initialAngle: 5.7, influenceRadius: 88, color: 0x7fd4d9 },
-    { name: "Neptune", mass: 660, radius: 14, orbitRadius: 850, angularSpeed: 0.004, initialAngle: 0.9, influenceRadius: 90, color: 0x4169e1 },
-    { name: "Pluto", mass: 45, radius: 4, orbitRadius: 980, angularSpeed: 0.003, initialAngle: 1.7, influenceRadius: 24, color: 0xc9b18a }
+    { name: "Sun", mass: 12000, radius: 28, orbitRadius: 0, angularSpeed: 0, initialAngle: 0, inclination: 0, ascendingNode: 0, influenceRadius: 135, color: 0xffcc33 },
+    { name: "Mercury", mass: 90, radius: 5, orbitRadius: 80, angularSpeed: 0.045, initialAngle: 0.4, inclination: 7.0, ascendingNode: 48.3, influenceRadius: 24, color: 0x999999 },
+    { name: "Venus", mass: 210, radius: 8, orbitRadius: 125, angularSpeed: 0.032, initialAngle: 1.1, inclination: 3.4, ascendingNode: 76.7, influenceRadius: 38, color: 0xffa64d },
+    { name: "Earth", mass: 280, radius: 9, orbitRadius: 180, angularSpeed: 0.024, initialAngle: 2.0, inclination: 0.0, ascendingNode: 0.0, influenceRadius: 52, color: 0x3a7bff },
+    { name: "Mars", mass: 170, radius: 7, orbitRadius: 250, angularSpeed: 0.018, initialAngle: 2.8, inclination: 1.85, ascendingNode: 49.6, influenceRadius: 45, color: 0xff5533 },
+    { name: "Ceres", mass: 75, radius: 5, orbitRadius: 315, angularSpeed: 0.014, initialAngle: 3.3, inclination: 10.6, ascendingNode: 80.3, influenceRadius: 28, color: 0xb0a090 },
+    { name: "Jupiter", mass: 1300, radius: 20, orbitRadius: 420, angularSpeed: 0.010, initialAngle: 4.0, inclination: 1.3, ascendingNode: 100.5, influenceRadius: 112, color: 0xd6a36a },
+    { name: "Saturn", mass: 950, radius: 17, orbitRadius: 560, angularSpeed: 0.007, initialAngle: 5.0, inclination: 2.49, ascendingNode: 113.7, influenceRadius: 102, color: 0xe6d28a },
+    { name: "Uranus", mass: 620, radius: 14, orbitRadius: 710, angularSpeed: 0.005, initialAngle: 5.7, inclination: 0.77, ascendingNode: 74.0, influenceRadius: 88, color: 0x7fd4d9 },
+    { name: "Neptune", mass: 660, radius: 14, orbitRadius: 850, angularSpeed: 0.004, initialAngle: 0.9, inclination: 1.77, ascendingNode: 131.8, influenceRadius: 90, color: 0x4169e1 },
+    { name: "Pluto", mass: 45, radius: 4, orbitRadius: 980, angularSpeed: 0.003, initialAngle: 1.7, inclination: 17.2, ascendingNode: 110.3, influenceRadius: 24, color: 0xc9b18a }
 ];
 
 const realScaledPlanetData = [
-    { name: "Sun", mass: 333000 * 280 * 0.015, radius: 28, orbitRadius: 0, angularSpeed: 0, initialAngle: 0, influenceRadius: 160, color: 0xffcc33, periodDays: 0, phaseAtEpoch: 0 },
-    { name: "Mercury", mass: 0.055 * 280, radius: 5, orbitRadius: 70, angularSpeed: 0, initialAngle: 0, influenceRadius: 20, color: 0x999999, periodDays: 87.969, phaseAtEpoch: 4.40 },
-    { name: "Venus", mass: 0.815 * 280, radius: 8, orbitRadius: 130, angularSpeed: 0, initialAngle: 0, influenceRadius: 36, color: 0xffa64d, periodDays: 224.701, phaseAtEpoch: 3.18 },
-    { name: "Earth", mass: 280, radius: 9, orbitRadius: 180, angularSpeed: 0, initialAngle: 0, influenceRadius: 52, color: 0x3a7bff, periodDays: 365.256, phaseAtEpoch: 1.75 },
-    { name: "Mars", mass: 0.107 * 280, radius: 7, orbitRadius: 275, angularSpeed: 0, initialAngle: 0, influenceRadius: 42, color: 0xff5533, periodDays: 686.980, phaseAtEpoch: 6.20 },
-    { name: "Ceres", mass: 0.03 * 280, radius: 5, orbitRadius: 385, angularSpeed: 0, initialAngle: 0, influenceRadius: 24, color: 0xb0a090, periodDays: 1680.0, phaseAtEpoch: 2.20 },
-    { name: "Jupiter", mass: 317.8 * 280, radius: 20, orbitRadius: 560, angularSpeed: 0, initialAngle: 0, influenceRadius: 130, color: 0xd6a36a, periodDays: 4332.59, phaseAtEpoch: 0.60 },
-    { name: "Saturn", mass: 95.2 * 280, radius: 17, orbitRadius: 760, angularSpeed: 0, initialAngle: 0, influenceRadius: 115, color: 0xe6d28a, periodDays: 10759.22, phaseAtEpoch: 5.80 },
-    { name: "Uranus", mass: 14.5 * 280, radius: 14, orbitRadius: 970, angularSpeed: 0, initialAngle: 0, influenceRadius: 95, color: 0x7fd4d9, periodDays: 30688.5, phaseAtEpoch: 1.10 },
-    { name: "Neptune", mass: 17.1 * 280, radius: 14, orbitRadius: 1180, angularSpeed: 0, initialAngle: 0, influenceRadius: 98, color: 0x4169e1, periodDays: 60182.0, phaseAtEpoch: 5.35 }
+    { name: "Sun", mass: 333000 * 280 * 0.015, radius: 28, orbitRadius: 0, angularSpeed: 0, initialAngle: 0, inclination: 0, ascendingNode: 0, influenceRadius: 160, color: 0xffcc33, periodDays: 0, phaseAtEpoch: 0 },
+    { name: "Mercury", mass: 0.055 * 280, radius: 5, orbitRadius: 70, angularSpeed: 0, initialAngle: 0, inclination: 7.00, ascendingNode: 48.33, influenceRadius: 20, color: 0x999999, periodDays: 87.969, phaseAtEpoch: 4.40 },
+    { name: "Venus", mass: 0.815 * 280, radius: 8, orbitRadius: 130, angularSpeed: 0, initialAngle: 0, inclination: 3.39, ascendingNode: 76.68, influenceRadius: 36, color: 0xffa64d, periodDays: 224.701, phaseAtEpoch: 3.18 },
+    { name: "Earth", mass: 280, radius: 9, orbitRadius: 180, angularSpeed: 0, initialAngle: 0, inclination: 0.00, ascendingNode: 0.00, influenceRadius: 52, color: 0x3a7bff, periodDays: 365.256, phaseAtEpoch: 1.75 },
+    { name: "Mars", mass: 0.107 * 280, radius: 7, orbitRadius: 275, angularSpeed: 0, initialAngle: 0, inclination: 1.85, ascendingNode: 49.56, influenceRadius: 42, color: 0xff5533, periodDays: 686.980, phaseAtEpoch: 6.20 },
+    { name: "Ceres", mass: 0.03 * 280, radius: 5, orbitRadius: 385, angularSpeed: 0, initialAngle: 0, inclination: 10.59, ascendingNode: 80.31, influenceRadius: 24, color: 0xb0a090, periodDays: 1680.0, phaseAtEpoch: 2.20 },
+    { name: "Jupiter", mass: 317.8 * 280, radius: 20, orbitRadius: 560, angularSpeed: 0, initialAngle: 0, inclination: 1.30, ascendingNode: 100.46, influenceRadius: 130, color: 0xd6a36a, periodDays: 4332.59, phaseAtEpoch: 0.60 },
+    { name: "Saturn", mass: 95.2 * 280, radius: 17, orbitRadius: 760, angularSpeed: 0, initialAngle: 0, inclination: 2.49, ascendingNode: 113.67, influenceRadius: 115, color: 0xe6d28a, periodDays: 10759.22, phaseAtEpoch: 5.80 },
+    { name: "Uranus", mass: 14.5 * 280, radius: 14, orbitRadius: 970, angularSpeed: 0, initialAngle: 0, inclination: 0.77, ascendingNode: 74.01, influenceRadius: 95, color: 0x7fd4d9, periodDays: 30688.5, phaseAtEpoch: 1.10 },
+    { name: "Neptune", mass: 17.1 * 280, radius: 14, orbitRadius: 1180, angularSpeed: 0, initialAngle: 0, inclination: 1.77, ascendingNode: 131.78, influenceRadius: 98, color: 0x4169e1, periodDays: 60182.0, phaseAtEpoch: 5.35 }
 ];
 
 let planets = [];
@@ -245,16 +271,22 @@ function makePlanetDataByMode() {
     return data;
 }
 
-function makeCircle(radius, color, opacity, y = 0, segments = 240) {
+function makeCircle(radius, color, opacity, y = 0, segments = 240, rotationSourcePlanet = null) {
     const points = [];
 
     for (let i = 0; i <= segments; i++) {
         const angle = (i / segments) * Math.PI * 2;
-        points.push(new THREE.Vector3(
+        const point = new THREE.Vector3(
             radius * Math.cos(angle),
             y,
             radius * Math.sin(angle)
-        ));
+        );
+
+        if (rotationSourcePlanet) {
+            points.push(rotationSourcePlanet.orbitTransformVector(point));
+        } else {
+            points.push(point);
+        }
     }
 
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
@@ -299,7 +331,7 @@ function makeStars() {
 function buildPlanetObjects() {
     for (const planet of planets) {
         if (planet.orbitRadius > 0) {
-            planet.orbitMesh = makeCircle(planet.orbitRadius, 0x888888, 0.34, 0, 260);
+            planet.orbitMesh = makeCircle(planet.orbitRadius, 0x888888, 0.34, 0, 260, planet);
             scene.add(planet.orbitMesh);
         }
 
@@ -419,14 +451,20 @@ function startPosition(t) {
 }
 
 function initialVelocity() {
-    const angleDegrees = Number(ui.angle.value);
+    const horizontalAngleDegrees = Number(ui.angle.value);
+    const verticalAngleDegrees = Number(ui.verticalAngle.value);
     const initialSpeed = Number(ui.speed.value);
-    const angle = angleDegrees * Math.PI / 180;
+
+    const horizontalAngle = horizontalAngleDegrees * Math.PI / 180;
+    const verticalAngle = verticalAngleDegrees * Math.PI / 180;
+
+    const horizontalSpeed = initialSpeed * Math.cos(verticalAngle);
+    const verticalSpeed = initialSpeed * Math.sin(verticalAngle);
 
     return new THREE.Vector3(
-        initialSpeed * Math.cos(angle),
-        0,
-        initialSpeed * Math.sin(angle)
+        horizontalSpeed * Math.cos(horizontalAngle),
+        verticalSpeed,
+        horizontalSpeed * Math.sin(horizontalAngle)
     );
 }
 
@@ -705,6 +743,8 @@ function updateInfo() {
 시점 고정: ${cameraLocked ? "ON" : "OFF"}
 
 [예상 궤적]
+수평 발사각: ${Number(ui.angle.value).toFixed(1)}°
+수직 발사각: ${Number(ui.verticalAngle.value).toFixed(1)}°
 예상 초기 속도: ${predictedResult.initialSpeed.toFixed(2)}
 예상 최종 속도: ${predictedFinalSpeed.toFixed(2)}
 예상 최대 속도: ${predictedMaxSpeed.toFixed(2)}
@@ -784,11 +824,71 @@ function drawChart(speeds, label, targetCanvas = ui.chart) {
 }
 
 function updateUIValues() {
-    ui.angleValue.textContent = ui.angle.value;
-    ui.speedValue.textContent = ui.speed.value;
-    ui.timeValue.textContent = ui.startTime.value;
-    ui.massValue.textContent = Number(ui.massScale.value).toFixed(1);
-    ui.radiusValue.textContent = Number(ui.radiusScale.value).toFixed(1);
+    ui.angleValue.textContent = Number(ui.angle.value).toFixed(1);
+    ui.verticalAngleValue.textContent = Number(ui.verticalAngle.value).toFixed(1);
+    ui.speedValue.textContent = Number(ui.speed.value).toFixed(1);
+    ui.timeValue.textContent = Number(ui.startTime.value).toFixed(1);
+    ui.massValue.textContent = Number(ui.massScale.value).toFixed(2);
+    ui.radiusValue.textContent = Number(ui.radiusScale.value).toFixed(2);
+}
+
+function clampRangeValue(input, value) {
+    const min = Number(input.min);
+    const max = Number(input.max);
+    return Math.min(max, Math.max(min, value));
+}
+
+function setRangeValue(input, value) {
+    const step = Number(input.step || 1);
+    const decimals = step.toString().includes(".")
+        ? step.toString().split(".")[1].length
+        : 0;
+
+    input.value = clampRangeValue(input, value).toFixed(decimals);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function setupKeyboardRangeControl(input) {
+    input.addEventListener("keydown", (event) => {
+        const key = event.key;
+
+        if (
+            key !== "ArrowLeft" &&
+            key !== "ArrowRight" &&
+            key !== "ArrowDown" &&
+            key !== "ArrowUp"
+        ) {
+            return;
+        }
+
+        event.preventDefault();
+
+        const baseStep = Number(input.dataset.keyStep || input.step || 1);
+        const multiplier = event.shiftKey ? 10 : event.altKey ? 0.1 : 1;
+        const step = baseStep * multiplier;
+
+        const direction =
+            key === "ArrowRight" || key === "ArrowUp"
+                ? 1
+                : -1;
+
+        setRangeValue(input, Number(input.value) + direction * step);
+    });
+}
+
+function setupAllKeyboardRangeControls() {
+    const rangeInputs = [
+        ui.angle,
+        ui.verticalAngle,
+        ui.speed,
+        ui.startTime,
+        ui.massScale,
+        ui.radiusScale
+    ];
+
+    for (const input of rangeInputs) {
+        setupKeyboardRangeControl(input);
+    }
 }
 
 function loadSelectedPlanet() {
@@ -915,7 +1015,7 @@ function resetToSliderTime() {
 
 function moveBack(seconds) {
     simTime = Math.max(0, simTime - seconds);
-    ui.startTime.value = simTime.toFixed(0);
+    ui.startTime.value = simTime.toFixed(1);
     resetToSliderTime();
 }
 
@@ -963,7 +1063,7 @@ function handleClick(event) {
     }
 }
 
-for (const input of [ui.angle, ui.speed]) {
+for (const input of [ui.angle, ui.verticalAngle, ui.speed]) {
     input.addEventListener("input", () => {
         updateUIValues();
         clearActual();
@@ -1088,6 +1188,7 @@ function animate() {
 }
 
 makeStars();
+setupAllKeyboardRangeControls();
 updateUIValues();
 updateCameraLockButton();
 rebuildSolarSystem();
