@@ -8,10 +8,14 @@ const DT = 0.08;
 const PREDICT_DT = 0.18;
 const DURATION = 900;
 const SOFTENING = 8;
-const MAX_POINTS = 3500;
-const TIME_FLOW = 25;
+const MAX_POINTS = 2500;
+const TIME_FLOW = 20;
 const ORBIT_DISTANCE_SCALE = 1.75;
 const WORLD_LIMIT = 5200;
+
+const ACTUAL_RENDER_INTERVAL = 0.04;
+const CHART_RENDER_INTERVAL = 0.18;
+const INFO_RENDER_INTERVAL = 0.12;
 
 const viewport = document.getElementById("viewport");
 
@@ -31,7 +35,7 @@ camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setClearColor(0x000000, 1);
 renderer.domElement.style.display = "block";
 viewport.appendChild(renderer.domElement);
@@ -225,6 +229,10 @@ let accumulator = 0;
 let lastChartSpeeds = [];
 let lastChartLabel = "speed";
 
+let actualRenderTimer = 0;
+let chartRenderTimer = 0;
+let infoRenderTimer = 0;
+
 let cameraLocked = false;
 let cameraLockOffset = new THREE.Vector3(240, 220, 240);
 
@@ -302,7 +310,7 @@ function makeCircle(radius, color, opacity, y = 0, segments = 240, rotationSourc
 }
 
 function makeStars() {
-    const count = 2200;
+    const count = 1200;
     const positions = [];
 
     for (let i = 0; i < count; i++) {
@@ -322,9 +330,9 @@ function makeStars() {
 
     const material = new THREE.PointsMaterial({
         color: 0xffffff,
-        size: 1.6,
+        size: 1.5,
         transparent: true,
-        opacity: 0.72
+        opacity: 0.65
     });
 
     scene.add(new THREE.Points(geometry, material));
@@ -333,11 +341,11 @@ function makeStars() {
 function buildPlanetObjects() {
     for (const planet of planets) {
         if (planet.orbitRadius > 0) {
-            planet.orbitMesh = makeCircle(planet.orbitRadius, 0x888888, 0.34, 0, 260, planet);
+            planet.orbitMesh = makeCircle(planet.orbitRadius, 0x888888, 0.34, 0, 220, planet);
             scene.add(planet.orbitMesh);
         }
 
-        const geometry = new THREE.SphereGeometry(planet.visualScaledRadius, 40, 40);
+        const geometry = new THREE.SphereGeometry(planet.visualScaledRadius, 32, 32);
         const material = new THREE.MeshStandardMaterial({
             color: planet.color,
             emissive: planet.name === "Sun" ? planet.color : 0x000000,
@@ -350,11 +358,11 @@ function buildPlanetObjects() {
         planet.mesh.userData.planet = planet;
         scene.add(planet.mesh);
 
-        planet.influenceMesh = makeCircle(planet.influenceRadius, 0x4da3ff, 0.30, 2.0, 180);
+        planet.influenceMesh = makeCircle(planet.influenceRadius, 0x4da3ff, 0.30, 2.0, 120);
         scene.add(planet.influenceMesh);
     }
 
-    hoverRing = makeCircle(22, 0xffffff, 0.9, 3.0, 120);
+    hoverRing = makeCircle(22, 0xffffff, 0.9, 3.0, 80);
     hoverRing.visible = false;
     scene.add(hoverRing);
 }
@@ -407,6 +415,9 @@ function rebuildSolarSystem() {
     running = false;
     actualState = null;
     accumulator = 0;
+    actualRenderTimer = 0;
+    chartRenderTimer = 0;
+    infoRenderTimer = 0;
 
     resetActualObjects();
     resetPredictedObjects();
@@ -562,14 +573,14 @@ function drawPredictedTrajectory() {
     scene.add(predictedLine);
 
     predictedStartMarker = new THREE.Mesh(
-        new THREE.SphereGeometry(7, 20, 20),
+        new THREE.SphereGeometry(7, 16, 16),
         new THREE.MeshBasicMaterial({ color: 0x00ff66 })
     );
     predictedStartMarker.position.copy(predictedResult.positions[0]);
     scene.add(predictedStartMarker);
 
     predictedEndMarker = new THREE.Mesh(
-        new THREE.SphereGeometry(8, 20, 20),
+        new THREE.SphereGeometry(8, 16, 16),
         new THREE.MeshBasicMaterial({ color: 0xff3333 })
     );
     predictedEndMarker.position.copy(predictedResult.positions[predictedResult.positions.length - 1]);
@@ -596,6 +607,9 @@ function launchActual() {
     running = true;
     playScale = 1;
     accumulator = 0;
+    actualRenderTimer = 0;
+    chartRenderTimer = 0;
+    infoRenderTimer = 0;
 
     resetActualObjects();
     drawActualTrajectory();
@@ -658,11 +672,6 @@ function stepActual(dt) {
         actualState.paused = true;
         running = false;
     }
-
-    updatePlanetPositions(simTime);
-    drawActualTrajectory();
-    drawChart(actualState.speeds, "actual speed");
-    updateInfo();
 }
 
 function drawActualTrajectory() {
@@ -679,7 +688,7 @@ function drawActualTrajectory() {
     scene.add(actualLine);
 
     actualMarker = new THREE.Mesh(
-        new THREE.SphereGeometry(12, 24, 24),
+        new THREE.SphereGeometry(12, 18, 18),
         new THREE.MeshBasicMaterial({ color: 0xffd84d })
     );
     actualMarker.position.copy(actualState.position);
@@ -908,13 +917,13 @@ function updatePlanetVisualGeometry(planet) {
 
     if (planet.mesh) {
         const oldGeometry = planet.mesh.geometry;
-        planet.mesh.geometry = new THREE.SphereGeometry(planet.visualScaledRadius, 40, 40);
+        planet.mesh.geometry = new THREE.SphereGeometry(planet.visualScaledRadius, 32, 32);
         oldGeometry.dispose();
     }
 
     if (planet.influenceMesh) {
         const oldGeometry = planet.influenceMesh.geometry;
-        planet.influenceMesh.geometry = makeCircle(planet.influenceRadius, 0x4da3ff, 0.30, 2.0, 180).geometry;
+        planet.influenceMesh.geometry = makeCircle(planet.influenceRadius, 0x4da3ff, 0.30, 2.0, 120).geometry;
         oldGeometry.dispose();
     }
 }
@@ -992,6 +1001,9 @@ function clearActual() {
     running = false;
     actualState = null;
     accumulator = 0;
+    actualRenderTimer = 0;
+    chartRenderTimer = 0;
+    infoRenderTimer = 0;
     resetActualObjects();
     updatePlanetPositions(simTime);
 
@@ -1168,16 +1180,40 @@ window.addEventListener("resize", () => {
 function animate() {
     const delta = clock.getDelta();
 
+    actualRenderTimer += delta;
+    chartRenderTimer += delta;
+    infoRenderTimer += delta;
+
+    let stepped = false;
+
     if (running && actualState && actualState.active && !actualState.paused) {
         accumulator += delta * playScale * TIME_FLOW;
 
         while (accumulator >= DT) {
             stepActual(DT);
             accumulator -= DT;
+            stepped = true;
         }
     }
 
     updatePlanetPositions(simTime);
+
+    if (stepped && actualState) {
+        if (actualRenderTimer >= ACTUAL_RENDER_INTERVAL || !actualState.active) {
+            drawActualTrajectory();
+            actualRenderTimer = 0;
+        }
+
+        if (chartRenderTimer >= CHART_RENDER_INTERVAL || !actualState.active) {
+            drawChart(actualState.speeds, "actual speed");
+            chartRenderTimer = 0;
+        }
+
+        if (infoRenderTimer >= INFO_RENDER_INTERVAL || !actualState.active) {
+            updateInfo();
+            infoRenderTimer = 0;
+        }
+    }
 
     if (actualState && actualMarker) {
         actualMarker.position.copy(actualState.position);
