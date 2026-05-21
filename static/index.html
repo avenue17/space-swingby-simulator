@@ -5,55 +5,30 @@
 <head>
     <meta charset="UTF-8">
     <title>Solar Swingby Simulator</title>
-    <link rel="stylesheet" href="/static/style.css?v=3">
+    <link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 <body>
 <div id="app">
-    <div id="intro-screen">
-        <div class="intro-card">
-            <div class="intro-badge">3D Gravity Simulator</div>
-            <h1>Solar Swingby Simulator</h1>
-            <p>
-                행성의 중력을 이용해 우주선의 궤적과 속도 변화를 관찰하는
-                3D 스윙바이 시뮬레이터입니다.
-            </p>
-
-            <div class="intro-actions">
-                <button id="start-simulator">시뮬레이터 시작</button>
-                <button id="intro-skip">바로 조작하기</button>
-            </div>
-
-            <div class="intro-hint">
-                행성을 클릭하면 질량과 반지름을 조정할 수 있습니다.
-            </div>
-        </div>
-    </div>
-
     <div id="viewport"></div>
 
     <button id="toggle-left" class="panel-toggle left-toggle">☰</button>
     <button id="toggle-right" class="panel-toggle right-toggle">☷</button>
 
     <div id="left-panel">
-        <div class="panel-title">
-            <div>
-                <h1>Solar Swingby</h1>
-                <p>Launch & Planet Control</p>
-            </div>
-        </div>
+        <h1>Solar Swingby Simulator</h1>
 
         <section>
-            <h2>Launch</h2>
+            <h2>우주선 설정</h2>
 
             <label>
                 수평 발사각
-                <span><span id="angle-value">25.0</span>°</span>
+                <span id="angle-value">25.0</span>°
             </label>
             <input id="angle" type="range" min="0" max="360" value="25" step="0.1" data-key-step="0.1">
 
             <label>
                 수직 발사각
-                <span><span id="vertical-angle-value">0.0</span>°</span>
+                <span id="vertical-angle-value">0.0</span>°
             </label>
             <input id="vertical-angle" type="range" min="-90" max="90" value="0" step="0.1" data-key-step="0.1">
 
@@ -69,31 +44,25 @@
             </label>
             <input id="start-time" type="range" min="0" max="900" value="0" step="0.1" data-key-step="0.1">
 
-            <div class="compact-grid">
-                <div>
-                    <label>태양계 모드</label>
-                    <select id="system-mode">
-                        <option value="custom">Custom</option>
-                        <option value="real">Real Scaled</option>
-                    </select>
-                </div>
+            <label>태양계 모드</label>
+            <select id="system-mode">
+                <option value="custom">Custom Solar System</option>
+                <option value="real">Real Scaled Solar System</option>
+            </select>
 
-                <div>
-                    <label>기준 날짜</label>
-                    <input id="date-input" type="date" value="2026-05-20">
-                </div>
-            </div>
+            <label>기준 날짜</label>
+            <input id="date-input" type="date" value="2026-05-20">
 
-            <div class="button-row wide primary-actions">
+            <div class="button-row wide">
                 <button id="launch">발사</button>
                 <button id="play">재생</button>
                 <button id="pause">멈춤</button>
-                <button id="reset-flight">초기화</button>
+                <button id="reset-flight">비행 초기화</button>
             </div>
         </section>
 
         <section>
-            <h2>Planet</h2>
+            <h2>행성 설정</h2>
 
             <div id="selected-planet">선택된 행성: Earth</div>
 
@@ -111,20 +80,13 @@
 
             <div class="button-row wide">
                 <button id="save-planet">Save</button>
-                <button id="reset-planets">Reset Solar System</button>
+                <button id="reset-planets">태양계 초기화</button>
             </div>
         </section>
     </div>
 
     <div id="right-panel">
-        <div class="panel-title small">
-            <div>
-                <h1>Flight Data</h1>
-                <p>Speed, status, and trajectory summary</p>
-            </div>
-        </div>
-
-        <div class="button-row control-actions">
+        <div class="button-row">
             <button id="speed-05x">0.5x</button>
             <button id="speed-1x">1x</button>
             <button id="speed-2x">2x</button>
@@ -148,19 +110,6 @@
         </div>
     </div>
 </div>
-
-<script>
-    const introScreen = document.getElementById("intro-screen");
-    const startSimulator = document.getElementById("start-simulator");
-    const introSkip = document.getElementById("intro-skip");
-
-    function closeIntro() {
-        introScreen.classList.add("hidden");
-    }
-
-    startSimulator.addEventListener("click", closeIntro);
-    introSkip.addEventListener("click", closeIntro);
-</script>
 
 <script type="module" src="/static/main.js?v=58"></script>
 </body>
