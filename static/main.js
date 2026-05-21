@@ -1,4 +1,4 @@
-// static/main.js - Three.js 기반 3D 태양계 스윙바이 시뮬레이터의 물리 계산, 렌더링, UI 이벤트 처리
+// static/main.js
 
 import * as THREE from "https://esm.sh/three@0.164.1";
 import { OrbitControls } from "https://esm.sh/three@0.164.1/examples/jsm/controls/OrbitControls.js";
@@ -109,6 +109,8 @@ class Planet {
         this.mesh = null;
         this.influenceMesh = null;
         this.orbitMesh = null;
+        this.atmosphereMesh = null;
+        this.ringMesh = null;
     }
 
     get mass() {
@@ -236,12 +238,16 @@ let infoRenderTimer = 0;
 let cameraLocked = false;
 let cameraLockOffset = new THREE.Vector3(240, 220, 240);
 
-const ambient = new THREE.AmbientLight(0xffffff, 0.65);
+const ambient = new THREE.AmbientLight(0xffffff, 0.55);
 scene.add(ambient);
 
-const sunLight = new THREE.PointLight(0xffffff, 3.0, 4000);
+const sunLight = new THREE.PointLight(0xffffff, 3.5, 5000);
 sunLight.position.set(0, 300, 0);
 scene.add(sunLight);
+
+const fillLight = new THREE.DirectionalLight(0x9bbcff, 0.45);
+fillLight.position.set(-900, 600, 900);
+scene.add(fillLight);
 
 const helperGrid = new THREE.GridHelper(WORLD_LIMIT, 80, 0x1d3557, 0x0b1a2d);
 helperGrid.material.transparent = true;
@@ -309,6 +315,244 @@ function makeCircle(radius, color, opacity, y = 0, segments = 240, rotationSourc
     return new THREE.Line(geometry, material);
 }
 
+function colorToRgb(hex) {
+    return {
+        r: (hex >> 16) & 255,
+        g: (hex >> 8) & 255,
+        b: hex & 255
+    };
+}
+
+function hashString(text) {
+    let hash = 0;
+
+    for (let i = 0; i < text.length; i++) {
+        hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+    }
+
+    return Math.abs(hash);
+}
+
+function seededNoise(seed, x, y) {
+    const value = Math.sin(x * 12.9898 + y * 78.233 + seed * 37.719) * 43758.5453;
+    return value - Math.floor(value);
+}
+
+function makePlanetTexture(planet) {
+    const size = 512;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+
+    const ctx = canvas.getContext("2d");
+    const base = colorToRgb(planet.color);
+    const seed = hashString(planet.name);
+
+    const gradient = ctx.createLinearGradient(0, 0, size, size);
+    gradient.addColorStop(0, `rgb(${Math.min(base.r + 45, 255)}, ${Math.min(base.g + 45, 255)}, ${Math.min(base.b + 45, 255)})`);
+    gradient.addColorStop(0.55, `rgb(${base.r}, ${base.g}, ${base.b})`);
+    gradient.addColorStop(1, `rgb(${Math.max(base.r - 55, 0)}, ${Math.max(base.g - 55, 0)}, ${Math.max(base.b - 55, 0)})`);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+
+    if (planet.name === "Sun") {
+        for (let i = 0; i < 1800; i++) {
+            const x = seededNoise(seed, i, 1) * size;
+            const y = seededNoise(seed, i, 2) * size;
+            const r = 2 + seededNoise(seed, i, 3) * 7;
+            const alpha = 0.08 + seededNoise(seed, i, 4) * 0.18;
+
+            ctx.beginPath();
+            ctx.fillStyle = `rgba(255, ${150 + seededNoise(seed, i, 5) * 90}, 40, ${alpha})`;
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        for (let y = 0; y < size; y += 18) {
+            ctx.strokeStyle = "rgba(255, 240, 120, 0.12)";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            for (let x = 0; x <= size; x += 8) {
+                const wave = Math.sin(x * 0.025 + y * 0.04) * 8;
+                if (x === 0) ctx.moveTo(x, y + wave);
+                else ctx.lineTo(x, y + wave);
+            }
+
+            ctx.stroke();
+        }
+    } else if (planet.name === "Earth") {
+        ctx.fillStyle = "rgba(35, 115, 240, 0.98)";
+        ctx.fillRect(0, 0, size, size);
+
+        ctx.fillStyle = "rgba(45, 175, 95, 0.90)";
+        for (let i = 0; i < 36; i++) {
+            const cx = seededNoise(seed, i, 1) * size;
+            const cy = seededNoise(seed, i, 2) * size;
+            const rx = 24 + seededNoise(seed, i, 3) * 62;
+            const ry = 12 + seededNoise(seed, i, 4) * 34;
+
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, rx, ry, seededNoise(seed, i, 5) * Math.PI, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.30)";
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 22; i++) {
+            const y = seededNoise(seed, i, 7) * size;
+            ctx.beginPath();
+
+            for (let x = 0; x <= size; x += 12) {
+                const wave = Math.sin(x * 0.025 + i) * 12;
+                if (x === 0) ctx.moveTo(x, y + wave);
+                else ctx.lineTo(x, y + wave);
+            }
+
+            ctx.stroke();
+        }
+    } else if (planet.name === "Jupiter" || planet.name === "Saturn") {
+        for (let y = 0; y < size; y++) {
+            const band = Math.sin(y * 0.045 + seed) * 0.5 + 0.5;
+            const noise = seededNoise(seed, 1, y) * 0.25;
+            const factor = 0.72 + band * 0.38 + noise;
+
+            ctx.strokeStyle = `rgb(${Math.min(base.r * factor, 255)}, ${Math.min(base.g * factor, 255)}, ${Math.min(base.b * factor, 255)})`;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(size, y);
+            ctx.stroke();
+        }
+
+        if (planet.name === "Jupiter") {
+            ctx.fillStyle = "rgba(170, 55, 40, 0.58)";
+            ctx.beginPath();
+            ctx.ellipse(size * 0.64, size * 0.56, 42, 23, -0.2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    } else if (planet.name === "Mars") {
+        for (let i = 0; i < 950; i++) {
+            const x = seededNoise(seed, i, 1) * size;
+            const y = seededNoise(seed, i, 2) * size;
+            const r = 1 + seededNoise(seed, i, 3) * 5;
+            const alpha = 0.06 + seededNoise(seed, i, 4) * 0.14;
+
+            ctx.beginPath();
+            ctx.fillStyle = `rgba(70, 25, 12, ${alpha})`;
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.fillStyle = "rgba(255, 230, 190, 0.42)";
+        ctx.beginPath();
+        ctx.ellipse(size * 0.5, size * 0.08, 95, 22, 0, 0, Math.PI * 2);
+        ctx.fill();
+    } else {
+        for (let i = 0; i < 1100; i++) {
+            const x = seededNoise(seed, i, 1) * size;
+            const y = seededNoise(seed, i, 2) * size;
+            const r = 0.8 + seededNoise(seed, i, 3) * 3.8;
+            const light = seededNoise(seed, i, 4) > 0.5 ? 1 : -1;
+            const alpha = 0.045 + seededNoise(seed, i, 5) * 0.09;
+
+            ctx.beginPath();
+            ctx.fillStyle = light > 0
+                ? `rgba(255, 255, 255, ${alpha})`
+                : `rgba(0, 0, 0, ${alpha})`;
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    texture.needsUpdate = true;
+
+    return texture;
+}
+
+function makePlanetMaterial(planet) {
+    const texture = makePlanetTexture(planet);
+
+    if (planet.name === "Sun") {
+        return new THREE.MeshStandardMaterial({
+            map: texture,
+            emissiveMap: texture,
+            emissive: 0xffaa22,
+            emissiveIntensity: 1.8,
+            roughness: 0.9,
+            metalness: 0.0
+        });
+    }
+
+    return new THREE.MeshStandardMaterial({
+        map: texture,
+        roughness: planet.name === "Earth" ? 0.58 : 0.78,
+        metalness: 0.02,
+        emissive: planet.color,
+        emissiveIntensity: 0.035
+    });
+}
+
+function makeAtmosphereMesh(planet) {
+    if (planet.name === "Sun") return null;
+
+    const geometry = new THREE.SphereGeometry(planet.visualScaledRadius * 1.08, 32, 32);
+    const material = new THREE.MeshBasicMaterial({
+        color: planet.name === "Earth" ? 0x66ccff : planet.color,
+        transparent: true,
+        opacity: planet.name === "Earth" ? 0.22 : 0.10,
+        blending: THREE.AdditiveBlending,
+        side: THREE.BackSide,
+        depthWrite: false
+    });
+
+    return new THREE.Mesh(geometry, material);
+}
+
+function makePlanetRingMesh(planet) {
+    if (planet.name !== "Saturn" && planet.name !== "Uranus") return null;
+
+    const inner = planet.visualScaledRadius * 1.35;
+    const outer = planet.visualScaledRadius * (planet.name === "Saturn" ? 2.25 : 1.85);
+
+    const geometry = new THREE.RingGeometry(inner, outer, 96);
+    const material = new THREE.MeshBasicMaterial({
+        color: planet.name === "Saturn" ? 0xd8c381 : 0x9bdfe8,
+        transparent: true,
+        opacity: planet.name === "Saturn" ? 0.48 : 0.32,
+        side: THREE.DoubleSide,
+        depthWrite: false
+    });
+
+    const ring = new THREE.Mesh(geometry, material);
+    ring.rotation.x = Math.PI / 2.25;
+    ring.rotation.z = planet.name === "Uranus" ? Math.PI / 2.1 : Math.PI / 9;
+
+    return ring;
+}
+
+function disposeObjectDeep(object) {
+    if (!object) return;
+
+    object.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+
+        if (child.material) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+
+            for (const material of materials) {
+                if (material.map) material.map.dispose();
+                if (material.emissiveMap) material.emissiveMap.dispose();
+                material.dispose();
+            }
+        }
+    });
+
+    scene.remove(object);
+}
+
 function makeStars() {
     const count = 1200;
     const positions = [];
@@ -345,20 +589,24 @@ function buildPlanetObjects() {
             scene.add(planet.orbitMesh);
         }
 
-        const geometry = new THREE.SphereGeometry(planet.visualScaledRadius, 32, 32);
-        const material = new THREE.MeshStandardMaterial({
-            color: planet.color,
-            emissive: planet.name === "Sun" ? planet.color : 0x000000,
-            emissiveIntensity: planet.name === "Sun" ? 1.1 : 0.08,
-            roughness: 0.75,
-            metalness: 0.05
-        });
+        const geometry = new THREE.SphereGeometry(planet.visualScaledRadius, 48, 48);
+        const material = makePlanetMaterial(planet);
 
         planet.mesh = new THREE.Mesh(geometry, material);
         planet.mesh.userData.planet = planet;
         scene.add(planet.mesh);
 
-        planet.influenceMesh = makeCircle(planet.influenceRadius, 0x4da3ff, 0.30, 2.0, 120);
+        planet.atmosphereMesh = makeAtmosphereMesh(planet);
+        if (planet.atmosphereMesh) {
+            planet.mesh.add(planet.atmosphereMesh);
+        }
+
+        planet.ringMesh = makePlanetRingMesh(planet);
+        if (planet.ringMesh) {
+            planet.mesh.add(planet.ringMesh);
+        }
+
+        planet.influenceMesh = makeCircle(planet.influenceRadius, 0x4da3ff, 0.24, 2.0, 120);
         scene.add(planet.influenceMesh);
     }
 
@@ -369,18 +617,7 @@ function buildPlanetObjects() {
 
 function disposeObject(object) {
     if (!object) return;
-
-    scene.remove(object);
-
-    if (object.geometry) object.geometry.dispose();
-
-    if (object.material) {
-        if (Array.isArray(object.material)) {
-            for (const material of object.material) material.dispose();
-        } else {
-            object.material.dispose();
-        }
-    }
+    disposeObjectDeep(object);
 }
 
 function clearPlanetObjects() {
@@ -917,13 +1154,45 @@ function updatePlanetVisualGeometry(planet) {
 
     if (planet.mesh) {
         const oldGeometry = planet.mesh.geometry;
-        planet.mesh.geometry = new THREE.SphereGeometry(planet.visualScaledRadius, 32, 32);
+        const oldMaterial = planet.mesh.material;
+
+        planet.mesh.geometry = new THREE.SphereGeometry(planet.visualScaledRadius, 48, 48);
+        planet.mesh.material = makePlanetMaterial(planet);
+
         oldGeometry.dispose();
+
+        if (oldMaterial.map) oldMaterial.map.dispose();
+        if (oldMaterial.emissiveMap) oldMaterial.emissiveMap.dispose();
+        oldMaterial.dispose();
+
+        if (planet.atmosphereMesh) {
+            planet.mesh.remove(planet.atmosphereMesh);
+            planet.atmosphereMesh.geometry.dispose();
+            planet.atmosphereMesh.material.dispose();
+            planet.atmosphereMesh = null;
+        }
+
+        if (planet.ringMesh) {
+            planet.mesh.remove(planet.ringMesh);
+            planet.ringMesh.geometry.dispose();
+            planet.ringMesh.material.dispose();
+            planet.ringMesh = null;
+        }
+
+        planet.atmosphereMesh = makeAtmosphereMesh(planet);
+        if (planet.atmosphereMesh) {
+            planet.mesh.add(planet.atmosphereMesh);
+        }
+
+        planet.ringMesh = makePlanetRingMesh(planet);
+        if (planet.ringMesh) {
+            planet.mesh.add(planet.ringMesh);
+        }
     }
 
     if (planet.influenceMesh) {
         const oldGeometry = planet.influenceMesh.geometry;
-        planet.influenceMesh.geometry = makeCircle(planet.influenceRadius, 0x4da3ff, 0.30, 2.0, 120).geometry;
+        planet.influenceMesh.geometry = makeCircle(planet.influenceRadius, 0x4da3ff, 0.24, 2.0, 120).geometry;
         oldGeometry.dispose();
     }
 }
@@ -1197,6 +1466,16 @@ function animate() {
     }
 
     updatePlanetPositions(simTime);
+
+    for (const planet of planets) {
+        if (planet.mesh && planet.name !== "Sun") {
+            planet.mesh.rotation.y += delta * 0.18;
+        }
+
+        if (planet.mesh && planet.name === "Sun") {
+            planet.mesh.rotation.y += delta * 0.08;
+        }
+    }
 
     if (stepped && actualState) {
         if (actualRenderTimer >= ACTUAL_RENDER_INTERVAL || !actualState.active) {
