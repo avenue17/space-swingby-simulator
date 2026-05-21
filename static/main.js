@@ -6,25 +6,27 @@ import { OrbitControls } from "https://esm.sh/three@0.164.1/examples/jsm/control
 const G = 0.9;
 const DT = 0.08;
 const PREDICT_DT = 0.18;
-const DURATION = 1800;
+const DURATION = 900;
 const SOFTENING = 8;
 const MAX_POINTS = 3500;
 const TIME_FLOW = 25;
+const ORBIT_DISTANCE_SCALE = 1.75;
+const WORLD_LIMIT = 5200;
 
 const viewport = document.getElementById("viewport");
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
-scene.fog = new THREE.FogExp2(0x02030a, 0.00022);
+scene.fog = new THREE.FogExp2(0x02030a, 0.00012);
 
 const camera = new THREE.PerspectiveCamera(
     60,
     window.innerWidth / window.innerHeight,
     0.1,
-    8000
+    12000
 );
 
-camera.position.set(900, 900, 900);
+camera.position.set(1500, 1300, 1500);
 camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -39,7 +41,7 @@ controls.target.set(0, 0, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 80;
-controls.maxDistance = 3000;
+controls.maxDistance = 7000;
 controls.update();
 
 const raycaster = new THREE.Raycaster();
@@ -92,7 +94,7 @@ class Planet {
         this.baseMass = data.mass;
         this.baseRadius = data.radius;
         this.baseInfluenceRadius = data.influenceRadius;
-        this.orbitRadius = data.orbitRadius;
+        this.orbitRadius = data.orbitRadius * ORBIT_DISTANCE_SCALE;
         this.angularSpeed = data.angularSpeed;
         this.initialAngle = data.initialAngle;
         this.inclination = (data.inclination ?? 0) * Math.PI / 180;
@@ -233,7 +235,7 @@ const sunLight = new THREE.PointLight(0xffffff, 3.0, 4000);
 sunLight.position.set(0, 300, 0);
 scene.add(sunLight);
 
-const helperGrid = new THREE.GridHelper(2600, 52, 0x1d3557, 0x0b1a2d);
+const helperGrid = new THREE.GridHelper(WORLD_LIMIT, 80, 0x1d3557, 0x0b1a2d);
 helperGrid.material.transparent = true;
 helperGrid.material.opacity = 0.18;
 scene.add(helperGrid);
@@ -300,11 +302,11 @@ function makeCircle(radius, color, opacity, y = 0, segments = 240, rotationSourc
 }
 
 function makeStars() {
-    const count = 1800;
+    const count = 2200;
     const positions = [];
 
     for (let i = 0; i < count; i++) {
-        const r = 2200 + Math.random() * 2200;
+        const r = 4200 + Math.random() * 4200;
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
 
@@ -529,7 +531,7 @@ function computePredictedTrajectory() {
 
         collision = checkCollision(position, t);
         if (collision) break;
-        if (position.length() > 2600) break;
+        if (position.length() > WORLD_LIMIT) break;
     }
 
     predictedResult = {
@@ -651,7 +653,7 @@ function stepActual(dt) {
         running = false;
     }
 
-    if (actualState.position.length() > 2600 || actualState.time - Number(ui.startTime.value) > DURATION) {
+    if (actualState.position.length() > WORLD_LIMIT || actualState.time - Number(ui.startTime.value) > DURATION) {
         actualState.active = false;
         actualState.paused = true;
         running = false;
@@ -740,6 +742,7 @@ function updateInfo() {
         `[태양계 설정]
 모드: ${ui.systemMode.value === "real" ? "Real Scaled Solar System" : "Custom Solar System"}
 기준 날짜: ${ui.dateInput.value}
+공전 반지름 표시 배율: ${ORBIT_DISTANCE_SCALE.toFixed(2)}x
 시점 고정: ${cameraLocked ? "ON" : "OFF"}
 
 [예상 궤적]
@@ -923,7 +926,7 @@ function focusPlanet(planet) {
     const position = planet.positionAt(simTime);
     controls.target.copy(position);
 
-    const offset = new THREE.Vector3(140, 140, 140);
+    const offset = new THREE.Vector3(180, 170, 180);
     camera.position.copy(position.clone().add(offset));
     camera.lookAt(position);
     controls.update();
@@ -934,7 +937,7 @@ function resetCamera() {
     updateCameraLockButton();
 
     controls.target.set(0, 0, 0);
-    camera.position.set(900, 900, 900);
+    camera.position.set(1500, 1300, 1500);
     camera.lookAt(0, 0, 0);
     controls.update();
 }
@@ -964,7 +967,7 @@ function toggleCameraLock() {
         cameraLockOffset.copy(camera.position.clone().sub(controls.target));
 
         if (cameraLockOffset.length() < 80) {
-            cameraLockOffset.set(240, 220, 240);
+            cameraLockOffset.set(300, 260, 300);
         }
 
         controls.target.copy(target);
