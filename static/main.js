@@ -5,7 +5,7 @@ import { OrbitControls } from "https://esm.sh/three@0.164.1/examples/jsm/control
 
 const G = 0.9;
 const DT = 0.08;
-const PREDICT_DT = 0.18;
+const PREDICT_DT = 0.10;
 const DURATION = 900;
 const SOFTENING = 8;
 const MAX_POINTS = 2500;
